@@ -27,8 +27,8 @@ const MenuGraphSettings = observer(class MenuGraphSettings extends React.Compone
 							<MenuItemVertical 
 								key={i} 
 								{...item} 
-								onMouseEnter={(e: any) => { this.onMouseEnter(e, item); }} 
-								onClick={(e: any) => { this.onClick(e, item); }} 
+								onMouseEnter={e => this.onMouseEnter(e, item)} 
+								onClick={e => this.onClick(e, item)} 
 							/>
 						);
 					})}
@@ -60,7 +60,7 @@ const MenuGraphSettings = observer(class MenuGraphSettings extends React.Compone
 	rebind () {
 		this.unbind();
 
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 	
@@ -100,11 +100,16 @@ const MenuGraphSettings = observer(class MenuGraphSettings extends React.Compone
 					{ id: 'relation', name: translate('menuGraphSettingsRelations') },
 					{ id: 'orphan', name: translate('menuGraphSettingsUnlinkedObjects') },
 				] 
+			},
+			{
+				children: [
+					{ id: 'local', name: translate('menuGraphSettingsLocal') },
+				]
 			}
 		];
 
 		sections = sections.map(s => {
-			s.children = s.children.map(c => {
+			s.children = s.children.filter(it => it).map(c => {
 				c.switchValue = graph[c.id];
 				c.withSwitch = true;
 				c.onSwitch = (e: any, v: boolean) => { this.onClick(e, c); };

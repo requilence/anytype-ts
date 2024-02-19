@@ -1,4 +1,4 @@
-import { I, Storage, UtilCommon, analytics, Renderer, translate, UtilObject, UtilData } from 'Lib';
+import { I, Storage, UtilCommon, analytics, Renderer, translate, UtilObject, UtilData, UtilDate } from 'Lib';
 import { popupStore, authStore } from 'Store';
 import Surveys from 'json/survey.json';
 
@@ -42,7 +42,7 @@ class Survey {
 				break;
 
 			case I.SurveyType.Pmf:
-				param.time = UtilCommon.time();
+				param.time = UtilDate.now();
 				break;
 		};
 
@@ -61,7 +61,7 @@ class Survey {
 
 			case I.SurveyType.Pmf:
 				param.cancel = true;
-				param.time = UtilCommon.time();
+				param.time = UtilDate.now();
 				break;
 		};
 
@@ -73,10 +73,15 @@ class Survey {
 		return Storage.getSurvey(type).complete;
 	};
 
+	getTimeRegister (): number {
+		const profile = UtilObject.getProfile();
+		return Number(profile?.createdDate) || 0;
+	};
+
 	checkPmf () {
-		const time = UtilCommon.time();
+		const time = UtilDate.now();
 		const obj = Storage.getSurvey(I.SurveyType.Pmf);
-		const timeRegister = Number(Storage.get('timeRegister')) || 0;
+		const timeRegister = this.getTimeRegister();
 		const lastCompleted = Number(obj.time || Storage.get('lastSurveyTime')) || 0;
 		const lastCanceled = Number(obj.time || Storage.get('lastSurveyCanceled')) || 0;
 		const week = 86400 * 7;
@@ -94,15 +99,15 @@ class Survey {
 			return;
 		};
 
-		if (!popupStore.isOpen() && (cancelTime || !lastCompleted)) {
+		if (!popupStore.isOpen() && (cancelTime || !lastCompleted) && !completeTime) {
 			this.show(I.SurveyType.Pmf);
 		};
 	};
 
 	checkRegister () {
-		const timeRegister = Number(Storage.get('timeRegister')) || 0;
+		const timeRegister = this.getTimeRegister();
 		const isComplete = this.isComplete(I.SurveyType.Register);
-		const surveyTime = timeRegister && ((UtilCommon.time() - 86400 * 7 - timeRegister) > 0);
+		const surveyTime = timeRegister && ((UtilDate.now() - 86400 * 7 - timeRegister) > 0);
 
 		if (!isComplete && surveyTime && !popupStore.isOpen()) {
 			this.show(I.SurveyType.Register);
@@ -118,7 +123,7 @@ class Survey {
 	};
 
 	checkObject () {
-		const timeRegister = Number(Storage.get('timeRegister')) || 0;
+		const timeRegister = this.getTimeRegister();
 		const isComplete = this.isComplete(I.SurveyType.Object);
 
 		if (isComplete || !timeRegister) {
@@ -128,7 +133,6 @@ class Survey {
 		UtilData.search({
 			filters: [
 				{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.In, value: UtilObject.getPageLayouts() },
-				{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemTypes() },
 				{ operator: I.FilterOperator.And, relationKey: 'createdDate', condition: I.FilterCondition.Greater, value: timeRegister + 86400 * 3 }
 			],
 			limit: 50,

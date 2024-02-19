@@ -7,6 +7,7 @@ import { menuStore, popupStore, commonStore } from 'Store';
 import Constant from 'json/constant.json';
 
 import PopupSettings from './settings';
+import PopupSettingsOnboarding from './settings/onboarding';
 import PopupSearch from './search';
 import PopupHelp from './help';
 import PopupPrompt from './prompt';
@@ -14,15 +15,20 @@ import PopupPreview from './preview';
 import PopupConfirm from './confirm';
 import PopupShortcut from './shortcut';
 import PopupPage from './page';
-import PopupTemplate from './template';
 import PopupExport from './export';
 import PopupMigration from './migration';
 import PopupPin from './pin';
+import PopupPhrase from './phrase';
+import PopupObjectManager from './objectManager';
+import PopupUsecase from './usecase';
+import PopupAbout from './about';
+import PopupInviteRequest from './invite/request';
+import PopupInviteConfirm from './invite/confirm';
 
 class Popup extends React.Component<I.Popup> {
 
 	_isMounted = false;
-	node: any = null;
+	node = null;
 	isAnimating = false;
 
 	constructor (props: I.Popup) {
@@ -40,18 +46,24 @@ class Popup extends React.Component<I.Popup> {
 		const { className } = param;
 
 		const Components: any = {
-			settings:	 PopupSettings,
-			search:		 PopupSearch,
-			confirm:	 PopupConfirm,
-			prompt:		 PopupPrompt,
-			help:		 PopupHelp,
-			preview:	 PopupPreview,
-			shortcut:	 PopupShortcut,
-			page:		 PopupPage,
-			template:	 PopupTemplate,
-			export:		 PopupExport,
-			migration:	 PopupMigration,
-			pin:		 PopupPin,
+			settings:				 PopupSettings,
+			settingsOnboarding:		 PopupSettingsOnboarding,
+			search:					 PopupSearch,
+			confirm:				 PopupConfirm,
+			prompt:					 PopupPrompt,
+			help:					 PopupHelp,
+			preview:				 PopupPreview,
+			shortcut:				 PopupShortcut,
+			page:					 PopupPage,
+			export:					 PopupExport,
+			migration:				 PopupMigration,
+			pin:					 PopupPin,
+			phrase:					 PopupPhrase,
+			objectManager:			 PopupObjectManager,
+			usecase:				 PopupUsecase,
+			about:					 PopupAbout,
+			inviteRequest:			 PopupInviteRequest,
+			inviteConfirm:			 PopupInviteConfirm,
 		};
 		
 		const popupId = this.getId();
@@ -88,7 +100,7 @@ class Popup extends React.Component<I.Popup> {
 						/>
 					</div>
 				</div>
-				<Dimmer onClick={this.close} />
+				<Dimmer onClick={() => this.close()} />
 			</div>
 		);
 	};
@@ -185,7 +197,7 @@ class Popup extends React.Component<I.Popup> {
 		});
 	};
 
-	close () {
+	close (callBack?: () => void) {
 		const { id, param } = this.props;
 		const { preventMenuClose } = param;
 
@@ -195,7 +207,8 @@ class Popup extends React.Component<I.Popup> {
 		if (!preventMenuClose) {
 			menuStore.closeAll();
 		};
-		popupStore.close(id);
+
+		popupStore.close(id, callBack);
 	};
 
 	storageGet () {

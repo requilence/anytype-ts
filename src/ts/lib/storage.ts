@@ -1,11 +1,13 @@
 import { I, UtilCommon } from 'Lib';
-import { commonStore } from 'Store';
+import { commonStore, dbStore } from 'Store';
+import Constant from 'json/constant.json';
 
 const SPACE_KEYS = [
 	'toggle',
-	'defaultType',
 	'lastOpened',
 	'scroll',
+	'defaultType',
+	'pinnedTypes',
 ];
 
 class Storage {
@@ -14,16 +16,6 @@ class Storage {
 	
 	constructor () {
 		this.storage = localStorage;
-	};
-
-	parse (s: string) {
-		if (!s) {
-			return;
-		};
-
-		let ret = '';
-		try { ret = JSON.parse(s); } catch (e) { /**/ };
-		return ret;
 	};
 
 	get (key: string): any {
@@ -71,7 +63,7 @@ class Storage {
 		if (this.isSpaceKey(key)) {
 			const obj = this.getSpace();
 
-			delete(obj[commonStore.workspace][key]);
+			delete(obj[commonStore.space][key]);
 
 			this.setSpace(obj);
 		} else {
@@ -86,26 +78,34 @@ class Storage {
 	setSpaceKey (key: string, value: any) {
 		const obj = this.getSpace();
 
-		obj[commonStore.workspace][key] = value;
+		obj[commonStore.space][key] = value;
 
 		this.setSpace(obj);
 	};
 
 	getSpaceKey (key: string) {
 		const obj = this.getSpace();
-		return obj[commonStore.workspace][key];
+		return obj[commonStore.space][key];
 	};
 
 	getSpace () {
 		const obj = this.get('space') || {};
 
-		obj[commonStore.workspace] = obj[commonStore.workspace] || {};
+		obj[commonStore.space] = obj[commonStore.space] || {};
 
 		return obj;
 	};
 
 	setSpace (obj: any) {
 		this.set('space', obj, true);
+	};
+
+	deleteSpace (id: string) {
+		const obj = this.getSpace();
+
+		delete(obj[id]);
+
+		this.setSpace(obj);
 	};
 
 	setToggle (rootId: string, id: string, value: boolean) {
@@ -198,16 +198,89 @@ class Storage {
 		this.set('survey', obj, true);
 	};
 
+	initPinnedTypes () {
+		const list = this.getPinnedTypes();
+
+		if (list.length) {
+			return;
+		};
+
+		const keys = [
+			Constant.typeKey.note,
+			Constant.typeKey.page,
+			Constant.typeKey.task,
+		];
+
+		for (const key of keys) {
+			const type = dbStore.getTypeByKey(key);
+			if (type) {
+				list.push(type.id);
+			};
+		};
+
+		this.setPinnedTypes(list);
+	};
+
+	addPinnedType (id: string) {
+		const list = this.getPinnedTypes();
+
+		if (!id) {
+			return list;
+		};
+
+		list.unshift(id);
+		this.setPinnedTypes(list);
+		return list;
+	};
+
+	removePinnedType (id: string) {
+		const list = this.getPinnedTypes();
+
+		if (!id) {
+			return list;
+		};
+
+		this.setPinnedTypes(list.filter(it => it != id));
+		return list;
+	};
+
+	setPinnedTypes (list: string[]) {
+		list = list.slice(0, 50);
+
+		this.set('pinnedTypes', this.checkArray([ ...new Set(list) ]), true);
+	};
+
+	getPinnedTypes () {
+		return this.checkArray(this.get('pinnedTypes') || []);
+	};
+
+	checkArray (a) {
+		if (('object' != typeof(a)) || !UtilCommon.hasProperty(a, 'length')) {
+			return [];
+		};
+		return a;
+	};
+
 	logout () {
 		const keys = [ 
-			'accountId', 
+			'accountId',
+			'spaceId',
 			'tabStore', 
 			'graph',
-			'space',
 			'pin',
 		];
 
 		keys.forEach(key => this.delete(key));
+	};
+
+	parse (s: string) {
+		if (!s) {
+			return;
+		};
+
+		let ret = '';
+		try { ret = JSON.parse(s); } catch (e) { /**/ };
+		return ret;
 	};
 	
 };

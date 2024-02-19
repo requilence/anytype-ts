@@ -2,8 +2,6 @@
 
 .blocks {
 
-	$tableBorderOrange: #ffcf6f;
-
 	.block.blockTable { padding: 6px 0px; }
 	.block.blockTable {
 		.scrollWrap { width: 100%; padding: 5px; line-height: 0px; }
@@ -13,7 +11,7 @@
 
 		#selectionFrameContainer { position: absolute; left: 0px; top: 0px; pointer-events: none; z-index: 10; }
 		#selectionFrameContainer {
-			.selectionFrame { border: 2px solid $tableBorderOrange; position: absolute; border-radius: 4px; }
+			.selectionFrame { border: 2px solid var(--color-system-accent-50); position: absolute; border-radius: 4px; }
 			.selectionFrame.left { border-width: 0px; border-left-width: 2px; border-radius: 0px; }
 			.selectionFrame.right { border-width: 0px; border-right-width: 2px; border-radius: 0px; }
 			.selectionFrame.top { border-width: 0px; border-top-width: 2px; border-radius: 0px; }
@@ -26,11 +24,11 @@
 		.handle {
 			.inner { height: 22px; width: 2px; padding: 2px 0px; position: relative; }
 			.inner::after {
-				content: ""; display: block; background-color: $colorSystemAccent100; width: 100%; height: 100%; background-position: center;
+				content: ""; display: block; background-color: var(--color-system-accent-100); width: 100%; height: 100%; background-position: center;
 				background-repeat: no-repeat; border-radius: 3px; position: relative; z-index: 1;
 			}
 			.inner::before {
-				content: ""; height: 100%; width: 2px; position: absolute; left: 50%; margin-left: -1px; top: 0px; background: $colorBgPrimary; z-index: 0;
+				content: ""; height: 100%; width: 2px; position: absolute; left: 50%; margin-left: -1px; top: 0px; background: var(--color-bg-primary); z-index: 0;
 			}
 		}
 		.handle:hover, .handle.isActive {
@@ -48,7 +46,7 @@
 		.plusButton { z-index: 10; }
 		.plusButton { 
 			.icon { 
-				background-color: $colorShapeSecondary; background-image: url('~img/icon/table/plus.svg'); background-size: 10px; opacity: 0; 
+				background-color: var(--color-shape-secondary); background-image: url('~img/icon/table/plus.svg'); background-size: 10px; opacity: 0; 
 				transition: $transitionAllCommon; width: 100%; height: 100%; border-radius: 4px;
 			}
 		}
@@ -56,7 +54,7 @@
 		.plusButton.horizontal { height: 18px; width: 100%; left: 0px; bottom: -18px; padding-top: 4px; }
 		.plusButton.circle { position: absolute; height: 18px; width: 18px; right: -18px; bottom: 0px; padding-top: 4px; padding-left: 4px; opacity: 1; }
 		.plusButton.circle {
-			.icon { border-radius: 50%; background-color: $colorShapeSecondary; }
+			.icon { border-radius: 50%; background-color: var(--color-shape-secondary); }
 		}
 		
 		.plusButton:hover, .plusButton.active {
@@ -65,14 +63,14 @@
 
 		.table { display: block; border-collapse: collapse; position: relative; border-radius: 4px; }
 
-		.table.isClone { border-radius: 4px; box-shadow: 0px 4px 16px rgba(0, 0, 0, 0.2); border: 2px solid $tableBorderOrange; }
+		.table.isClone { border-radius: 4px; box-shadow: 0px 4px 16px rgba(0, 0, 0, 0.2); border: 2px solid var(--color-system-accent-50); }
 		.table.isClone {
-			.handleColumn { display: block; border-color: $colorSystemAccent100; }
+			.handleColumn { display: block; border-color: var(--color-system-accent-100); }
 		}
 		
-		.row { display: grid; position: relative; border-right: 1px solid $colorShapePrimary; }
+		.row { display: grid; position: relative; border-right: 1px solid var(--color-shape-primary); }
 		.row:first-child { border-radius: 4px 4px 0px 0px; }
-		.row:last-child { border-bottom: 1px solid $colorShapePrimary; border-radius: 0px 0px 4px 4px; }
+		.row:last-child { border-bottom: 1px solid var(--color-shape-primary); border-radius: 0px 0px 4px 4px; }
 
 		.row:first-child .cell:first-child { border-radius: 4px 0px 0px 0px; }
 		.row:first-child .cell:first-child {
@@ -98,13 +96,13 @@
 		}
 
 		.row.isHeader {
-			.cell { background-color: $colorVeryLightGrey; }
+			.cell { background-color: var(--color-shape-tertiary); }
 			.block { font-weight: 500; }
 		}
 
 		.cell { 
-			@include text-common; vertical-align: top; position: relative; cursor: text; flex-shrink: 0; background: $colorBgPrimary;
-			color: $colorShapePrimary; border-left: 1px solid $colorShapePrimary; border-top: 1px solid $colorShapePrimary;
+			@include text-common; vertical-align: top; position: relative; cursor: text; flex-shrink: 0; background: var(--color-bg-primary);
+			color: var(--color-shape-primary); border-left: 1px solid var(--color-shape-primary); border-top: 1px solid var(--color-shape-primary);
 		}
 
 		.cell.isHighlightedColumn.isFirst { border-radius: 4px 4px 0px 0px; }
@@ -123,7 +121,7 @@
 
 		.cell.isHighlightedCell {
 			.icon.menu { 
-				.inner { border-color: $tableBorderOrange; box-shadow: 0px 0px 0px 2px $tableBorderOrange; }
+				.inner { border-color: var(--color-system-accent-50); box-shadow: 0px 0px 0px 2px var(--color-system-accent-50); }
 			}
 		}
 
@@ -149,10 +147,10 @@
 			.resize { width: 6px; height: 100%; position: absolute; right: -3px; top: 0px; cursor: col-resize; z-index: 3; }
 			.click { width: 100%; height: 100%; }
 
-			.block { height: 100%; border: 0px !important; padding: 0px; margin: 0px; color: $colorTextPrimary; }
+			.block { height: 100%; border: 0px !important; padding: 0px; margin: 0px; color: var(--color-text-primary); }
 			.block {
 				.selectable { flex-grow: 1; }
-				.wrapContent, .wrap, .flex, .dropTarget, #value { height: 100%; }
+				.wrapContent, .wrap, .flex, .dropTarget { height: 100%; }
 
 				.wrapMenu { display: none; }
 				.wrapContent { width: 100%; display: flex; flex-direction: column;  }
@@ -162,12 +160,7 @@
 				.markers { padding: 9px 0px 9px 9px; }
 				.wrap { display: table; }
 
-				.editableWrap { display: table; }
-				#value { display: table-cell; }
-
-				#value, .placeholder { padding: 9px 20px 9px 0px; }
 				.focusable.isFocused { background: none; }
-				.placeholder { display: none !important; }
 			}
 
 			.icon.menu { width: 20px; height: 100%; position: absolute; right: 0px; top: 0px; z-index: 2; cursor: default; opacity: 0; pointer-events: none; }
@@ -179,10 +172,26 @@
 				} 
 			}
 			.icon.menu:hover {
-				.inner { box-shadow: 0px 0px 0px 1px $colorShapePrimary; background-color: $colorBgPrimary; }
+				.inner { box-shadow: 0px 0px 0px 1px var(--color-shape-primary); background-color: var(--color-bg-primary); }
 			}
 
 			.block.blockText { @include text-common; }
+			.block.blockText {
+				> .wrapContent {
+					> .selectable {
+						> .dropTarget {
+							> .flex {
+								> .editableWrap { display: table; }
+								> .editableWrap {
+									#value { display: table-cell; height: 100%; }
+									.placeholder { display: none !important; }
+									#value, .placeholder { padding: 9px 20px 9px 0px; }
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 

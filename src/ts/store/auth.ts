@@ -1,7 +1,12 @@
 import { observable, action, computed, set, makeObservable } from 'mobx';
 import { I, M, C, Storage, analytics, Renderer } from 'Lib';
-import { blockStore, detailStore, commonStore, dbStore, menuStore } from 'Store';
+import { blockStore, detailStore, commonStore, dbStore, menuStore, notificationStore } from 'Store';
 import { keyboard } from 'Lib';
+
+interface NetworkConfig {
+	mode: I.NetworkMode;
+	path: string;
+};
 
 class AuthStore {
 	
@@ -12,8 +17,10 @@ class AuthStore {
 	public name = '';
 	public phrase = '';
 	public token = '';
+	public appToken = '';
+	public appKey = '';
 	public threadMap: Map<string, any> = new Map();
-
+	
 	constructor () {
 		makeObservable(this, {
 			walletPathValue: observable,
@@ -56,25 +63,50 @@ class AuthStore {
 		return String(this.accountPathValue || '');
     };
 
+	get accountSpaceId (): string {
+		return String(this.accountItem?.info?.accountSpaceId || '');
+	};
+
+	get networkConfig (): NetworkConfig {
+		const obj = Storage.get('networkConfig') || {};
+
+		return {
+			mode: Number(obj.mode) || I.NetworkMode.Default,
+			path: String(obj.path || ''),
+		};
+	};
+
 	walletPathSet (v: string) {
-		this.walletPathValue = v;
+		this.walletPathValue = String(v || '');
     };
 
 	accountPathSet (v: string) {
-		this.accountPathValue = v;
+		this.accountPathValue = String(v || '');
     };
 
 	phraseSet (v: string) {
-		this.phrase = v;
+		this.phrase = String(v || '');
     };
 
 	nameSet (v: string) {
-		this.name = v;
+		this.name = String(v || '');
     };
 
 	tokenSet (v: string) {
-		this.token = v;
+		this.token = String(v || '');
+	};
+
+	appTokenSet (v: string) {
+		this.appToken = String(v || '');
     };
+
+	networkConfigSet (obj: NetworkConfig) {
+		Storage.set('networkConfig', obj, true);
+	};
+
+	appKeySet (v: string) {
+		this.appKey = String(v || '');
+	};
 
 	accountAdd (account: any) {
 		account.info = account.info || {};
@@ -89,6 +121,7 @@ class AuthStore {
     };
 
 	accountSet (account: any) {
+		account = account || {};
 		account.info = account.info || {};
 		account.status = account.status || {};
 		account.config = account.config || {};
@@ -104,6 +137,12 @@ class AuthStore {
 			Renderer.send('setAccount', this.accountItem);
 		};
     };
+
+	accountSetStatus (status: I.AccountStatus) {
+		if (this.accountItem) {
+			set(this.accountItem.status, status);
+		};
+	};
 
 	accountIsDeleted (): boolean {
 		return this.accountItem && this.accountItem.status && [ 
@@ -144,24 +183,31 @@ class AuthStore {
 		this.phraseSet('');
 	};
 
-	logout (removeData: boolean) {
-		C.WalletCloseSession(this.token, () => {
-			this.tokenSet('');
-			C.AccountStop(removeData);
-		});
+	logout (mainWindow: boolean, removeData: boolean) {
+		if (mainWindow) {
+			C.AccountStop(removeData, () => {
+				C.WalletCloseSession(this.token);
 
-		analytics.event('LogOut');
-		analytics.profile('');
+                this.tokenSet('');
+			});
+
+			analytics.event('LogOut');
+			Renderer.send('logout');
+		};
+
+		analytics.profile('', '');
 		analytics.removeContext();
 
 		keyboard.setPinChecked(false);
 
-		commonStore.workspaceSet('');
+		commonStore.spaceSet('');
+		commonStore.typeSet('');
 
 		blockStore.clearAll();
 		detailStore.clearAll();
 		dbStore.clearAll();
 		menuStore.closeAllForced();
+		notificationStore.clear();
 
 		this.clearAll();
 		Storage.logout();

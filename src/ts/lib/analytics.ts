@@ -7,7 +7,8 @@ import { OnboardStage } from 'Component/page/auth/animation/constants';
 const KEYS = [ 
 	'method', 'id', 'action', 'style', 'code', 'route', 'format', 'color', 'step',
 	'type', 'objectType', 'linkType', 'embedType', 'relationKey', 'layout', 'align', 'template', 'index', 'condition',
-	'tab', 'document', 'page', 'count', 'context', 'originalId', 'length', 'group', 'view', 'limit',
+	'tab', 'document', 'page', 'count', 'context', 'originalId', 'length', 'group', 'view', 'limit', 'usecase', 'name',
+	'processor',
 ];
 const KEY_CONTEXT = 'analyticsContext';
 const KEY_ORIGINAL_ID = 'analyticsOriginalId';
@@ -24,7 +25,7 @@ class Analytics {
 
 	isAllowed (): boolean {
 		const { config } = commonStore;
-		return !(config.sudo || [ 'alpha', 'beta' ].includes(config.channel) || !window.Electron.isPackaged) || this.debug();
+		return !(config.sudo || [ 'alpha', 'beta' ].includes(config.channel) || !UtilCommon.getElectron().isPackaged) || this.debug();
 	};
 	
 	init () {
@@ -35,11 +36,11 @@ class Analytics {
 		const { config, interfaceLang } = commonStore;
 		const platform = UtilCommon.getPlatform();
 
-		let version = String(window.Electron.version.app || '').split('-');
+		let version = String(UtilCommon.getElectron().version.app || '').split('-');
 		if (version.length) {
 			version = [ version[0] ];
 		};
-		if (config.sudo || !window.Electron.isPackaged || [ 'alpha' ].includes(config.channel)) {
+		if (config.sudo || !UtilCommon.getElectron().isPackaged || [ 'alpha' ].includes(config.channel)) {
 			version.push('dev');
 		} else
 		if ([ 'beta' ].includes(config.channel)) {
@@ -56,13 +57,16 @@ class Analytics {
 			includeUtm: true,
 			includeReferrer: true,
 			platform,
+			trackingOptions: {
+				ipAddress: false,
+			},
 		});
 
-		this.instance.setVersionName(window.Electron.version.app);
+		this.instance.setVersionName(UtilCommon.getElectron().version.app);
 		this.instance.setUserProperties({ 
 			deviceType: 'Desktop',
 			platform,
-			osVersion: window.Electron.version.os,
+			osVersion: UtilCommon.getElectron().version.os,
 			interfaceLang,
 		});
 
@@ -70,22 +74,17 @@ class Analytics {
 		this.log('[Analytics].init');
 	};
 
-	profile (id: string) {
+	profile (id: string, networkId: string) {
 		if (!this.instance || !this.isAllowed()) {
 			return;
 		};
 
 		this.instance.setUserId(id);
-		this.log(`[Analytics].profile: ${id}`);	
-	};
 
-	device (id: string) {
-		if (!this.instance || !this.isAllowed()) {
-			return;
+		if (id) {
+			this.instance.setUserProperties({ networkId });
 		};
-
-		this.instance.setUserProperties({ middlewareDeviceId: id });
-		this.log(`[Analytics].device: ${id}`);	
+		this.log(`[Analytics].profile: ${id} networkId: ${networkId}`);	
 	};
 
 	setContext (context: string, id: string) {
@@ -108,6 +107,7 @@ class Analytics {
 		};
 
 		const converted: any = {};
+
 		let param: any = {};
 
 		// Code mappers for common events
@@ -148,37 +148,67 @@ class Analytics {
 				break;
 			};
 
+			case 'ObjectInstall':
+			case 'ObjectUninstall':
 			case 'SelectGraphNode':
 			case 'CreateObject': {
 				data.layout = I.ObjectLayout[data.layout];
 				break;
 			};
 
+			case 'ScreenSet':
+			case 'ScreenCollection': {
+				data.type = I.ViewType[data.type];
+				break;
+			};
+
+			case 'SelectNetwork':
+				data.type = this.networkType(data.type);
+				break;
+
 			case 'CreateBlock':
 			case 'ChangeBlockStyle': {
 				data.style = Number(data.style) || 0;
 
-				if (data.type == I.BlockType.Text) {
-					data.style = I.TextStyle[data.style];
-				} else
-				if (data.type == I.BlockType.Div) {
-					data.style = I.DivStyle[data.style];
-				} else
-				if (data.type == I.BlockType.Dataview) {
-					data.style = I.ViewType[data.style];
-				} else
-				if (data.type == I.BlockType.File) {
-					if (undefined !== data.params?.fileType) {
-						data.fileType = Number(data.params.fileType) || 0;
-						data.type = I.FileType[data.fileType];
-					};
-					if (data.style == I.FileStyle.Auto) {
-						data.style = I.FileStyle.Embed;
+				switch (data.type) {
+					case I.BlockType.Text: {
+						data.style = I.TextStyle[data.style];
+						break;
 					};
 
-					data.style = I.FileStyle[data.style];
-				} else {
-					delete(data.style);
+					case I.BlockType.Div: {
+						data.style = I.DivStyle[data.style];
+						break;
+					};
+
+					case I.BlockType.Dataview: {
+						data.style = I.ViewType[data.style];
+						break;
+					};
+
+					case I.BlockType.File: {
+						if (undefined !== data.params?.fileType) {
+							data.fileType = Number(data.params.fileType) || 0;
+							data.type = I.FileType[data.fileType];
+						};
+						if (data.style == I.FileStyle.Auto) {
+							data.style = I.FileStyle.Embed;
+						} else {
+							data.style = I.FileStyle[data.style];
+						};
+						break;
+					};
+
+					case I.BlockType.Embed: {
+						data.processor = I.EmbedProcessor[Number(data.params.processor) || 0];
+						delete(data.style);
+						break;
+					};
+
+					default: {
+						delete(data.style);
+						break;
+					};
 				};
 				break;
 			};
@@ -273,6 +303,7 @@ class Analytics {
 			};
 
 			case 'SelectUsecase': {
+				data.type = Number(data.type) || 0;
 				data.type = I.Usecase[data.type];
 				break;
 			};
@@ -326,6 +357,12 @@ class Analytics {
 				break;
 			};
 
+			case 'DeleteSpace': {
+				data.type = Number(data.type) || 0;
+				data.type = I.SpaceType[data.type];
+				break;
+			};
+
 		};
 
 		param.middleTime = Number(data.middleTime) || 0;
@@ -350,6 +387,11 @@ class Analytics {
 			converted.align = I.BlockHAlign[converted.align];
 		};
 
+		if (undefined !== converted.usecase) {
+			converted.usecase = Number(converted.usecase) || 0;
+			converted.usecase = I.Usecase[converted.usecase];
+		};
+
 		param = Object.assign(param, converted);
 		
 		this.instance.logEvent(code, param);
@@ -366,11 +408,9 @@ class Analytics {
 			'main/navigation':	 'ScreenNavigation',
 			'main/type':		 'ScreenType',
 			'main/relation':	 'ScreenRelation',
-			'main/edit':		 'ScreenObject',
 			'main/space':		 'ScreenSpace',
 			'main/media':		 'ScreenMedia',
 			'main/history':		 'ScreenHistory',
-			'main/usecase':		 'ScreenUsecase',
 		};
 
 		return map[key] || '';
@@ -378,10 +418,7 @@ class Analytics {
 
 	popupMapper (params: any): string {
 		const { id } = params;
-		const map = {
-			settings: 'ScreenSettings',
-			search: 'ScreenSearch',
-		};
+		const map = {};
 
 		return map[id] || '';
 	};
@@ -413,18 +450,45 @@ class Analytics {
 		return code ? UtilCommon.toUpperCamelCase([ prefix, code ].join('-')) : '';
 	};
 
-	typeMapper (id: string) {
-		const type = dbStore.getType(id);
-		return type ? (type.sourceObject ? type.sourceObject : 'custom') : '';
+	typeMapper (id: string): string {
+		const object = dbStore.getTypeById(id);
+		if (!object) {
+			return '';
+		};
+
+		if (!object.isInstalled) {
+			return object.id;
+		} else {
+			return object.sourceObject ? object.sourceObject : 'custom';
+		};
 	};
 
 	relationMapper (key: string) {
-		const relation = dbStore.getRelationByKey(key);
-		return relation ? (relation.sourceObject ? relation.sourceObject : 'custom') : '';
+		const object = dbStore.getRelationByKey(key);
+		if (!object) {
+			return '';
+		};
+
+		if (!object.isInstalled) {
+			return object.id;
+		} else {
+			return object.sourceObject ? object.sourceObject : 'custom';
+		};
 	};
 
 	embedType (isInline: boolean): string {
 		return isInline ? 'inline' : 'object';
+	};
+
+	networkType (v: any): string {
+		v = Number(v) || 0;
+
+		switch (v) {
+			case I.NetworkMode.Default: return 'Anytype';
+			case I.NetworkMode.Local: return 'LocalOnly';
+			case I.NetworkMode.Custom: return 'SelfHost';
+		};
+		return '';
 	};
 
 	log (...args: any[]) {

@@ -8,186 +8,36 @@ import { Router, Route, Switch } from 'react-router-dom';
 import { Provider } from 'mobx-react';
 import { configure, spy } from 'mobx';
 import { enableLogging } from 'mobx-logger';
-import { Page, SelectionProvider, DragProvider, Progress, Toast, Preview as PreviewIndex, Navigation, ListPopup, ListMenu } from './component';
-import { commonStore, authStore, blockStore, detailStore, dbStore, menuStore, popupStore } from './store';
+import { Page, SelectionProvider, DragProvider, Progress, Toast, Preview as PreviewIndex, Navigation, ListPopup, ListMenu, ListNotification } from 'Component';
+import { commonStore, authStore, blockStore, detailStore, dbStore, menuStore, popupStore, notificationStore } from 'Store';
 import { 
-	I, C, UtilCommon, UtilFile, UtilData, UtilObject, UtilMenu, keyboard, Storage, analytics, dispatcher, translate, Renderer, 
-	focus, Preview, Mark, Animation, Onboarding, Survey
+	I, C, UtilCommon, UtilRouter, UtilFile, UtilData, UtilObject, UtilMenu, keyboard, Storage, analytics, dispatcher, translate, Renderer, 
+	focus, Preview, Mark, Animation, Onboarding, Survey, UtilDate, UtilSmile, Encode, Decode,
 } from 'Lib';
-import * as Docs from 'Docs';
+
+require('pdfjs-dist/build/pdf.worker.entry.js');
 
 configure({ enforceActions: 'never' });
 
 import 'katex/dist/katex.min.css';
 import 'prismjs/themes/prism.css';
 import 'react-virtualized/styles.css';
-import 'emoji-mart/css/emoji-mart.css';
+import 'swiper/scss';
+import 'react-pdf/dist/cjs/Page/AnnotationLayer.css';
+import 'react-pdf/dist/cjs/Page/TextLayer.css';
 
 import 'scss/common.scss';
-import 'scss/debug.scss';
-import 'scss/font.scss';
-
-import 'scss/component/cover.scss';
-import 'scss/component/deleted.scss';
-import 'scss/component/dragbox.scss';
-import 'scss/component/dragLayer.scss';
-import 'scss/component/dotIndicator.scss';
-import 'scss/component/editor.scss';
-import 'scss/component/emptySearch.scss';
-import 'scss/component/error.scss';
-import 'scss/component/footer.scss';
-import 'scss/component/frame.scss';
-import 'scss/component/header.scss';
-import 'scss/component/headSimple.scss';
-import 'scss/component/icon.scss';
-import 'scss/component/iconObject.scss';
-import 'scss/component/loader.scss';
-import 'scss/component/pager.scss';
-import 'scss/component/progress.scss';
-import 'scss/component/selection.scss';
-import 'scss/component/sidebar.scss';
-import 'scss/component/sync.scss';
-import 'scss/component/tag.scss';
-import 'scss/component/title.scss';
-import 'scss/component/toast.scss';
-import 'scss/component/tooltip.scss';
-import 'scss/component/navigation.scss';
-
-import 'scss/component/preview/common.scss';
-import 'scss/component/preview/link.scss';
-import 'scss/component/preview/object.scss';
-
-import 'scss/component/media/audio.scss';
-import 'scss/component/media/video.scss';
-
-import 'scss/component/hightlight.scss';
-import 'scss/component/progressBar.scss';
-
-import 'scss/page/auth.scss';
-import 'scss/page/main/edit.scss';
-import 'scss/page/main/graph.scss';
-import 'scss/page/main/history.scss';
-import 'scss/page/main/media.scss';
-import 'scss/page/main/navigation.scss';
-import 'scss/page/main/relation.scss';
-import 'scss/page/main/set.scss';
-import 'scss/page/main/space.scss';
-import 'scss/page/main/store.scss';
-import 'scss/page/main/type.scss';
-import 'scss/page/main/archive.scss';
-import 'scss/page/main/graph.scss';
-import 'scss/page/main/navigation.scss';
-import 'scss/page/main/block.scss';
-import 'scss/page/main/empty.scss';
-import 'scss/page/main/usecase.scss';
-
-import 'scss/block/bookmark.scss';
+import 'scss/component/common.scss';
+import 'scss/page/common.scss';
 import 'scss/block/common.scss';
-import 'scss/block/cover.scss';
-import 'scss/block/dataview.scss';
-import 'scss/block/dataview/cell.scss';
-import 'scss/block/dataview/view/board.scss';
-import 'scss/block/dataview/view/common.scss';
-import 'scss/block/dataview/view/gallery.scss';
-import 'scss/block/dataview/view/grid.scss';
-import 'scss/block/dataview/view/list.scss';
-import 'scss/block/div.scss';
-import 'scss/block/featured.scss';
-import 'scss/block/file.scss';
-import 'scss/block/iconPage.scss';
-import 'scss/block/iconUser.scss';
-import 'scss/block/latex.scss';
-import 'scss/block/layout.scss';
-import 'scss/block/link.scss';
-import 'scss/block/media.scss';
-import 'scss/block/relation.scss';
-import 'scss/block/table.scss';
-import 'scss/block/tableOfContents.scss';
-import 'scss/block/text.scss';
-import 'scss/block/type.scss';
-
-import 'scss/form/button.scss';
-import 'scss/form/drag.scss';
-import 'scss/form/filter.scss';
-import 'scss/form/input.scss';
-import 'scss/form/inputWithFile.scss';
-import 'scss/form/inputWithLabel.scss';
-import 'scss/form/phrase.scss';
-import 'scss/form/pin.scss';
-import 'scss/form/select.scss';
-import 'scss/form/switch.scss';
-import 'scss/form/textarea.scss';
-
-import 'scss/list/object.scss';
-import 'scss/list/widget.scss';
-import 'scss/list/previewObject.scss';
-import 'scss/list/objectManager.scss';
-
+import 'scss/form/common.scss';
+import 'scss/list/common.scss';
 import 'scss/widget/common.scss';
-import 'scss/widget/space.scss';
-import 'scss/widget/list.scss';
-import 'scss/widget/tree.scss';
-
 import 'scss/popup/common.scss';
-import 'scss/popup/confirm.scss';
-import 'scss/popup/export.scss';
-import 'scss/popup/help.scss';
-import 'scss/popup/page.scss';
-import 'scss/popup/preview.scss';
-import 'scss/popup/prompt.scss';
-import 'scss/popup/search.scss';
-import 'scss/popup/settings.scss';
-import 'scss/popup/shortcut.scss';
-import 'scss/popup/template.scss';
-import 'scss/popup/migration.scss';
-import 'scss/popup/pin.scss';
-
 import 'scss/menu/common.scss';
-import 'scss/menu/button.scss';
-import 'scss/menu/common.scss';
-import 'scss/menu/help.scss';
-import 'scss/menu/onboarding.scss';
-import 'scss/menu/relation.scss';
-import 'scss/menu/select.scss';
-import 'scss/menu/smile.scss';
-import 'scss/menu/thread.scss';
-import 'scss/menu/type.scss';
-import 'scss/menu/widget.scss';
-
-import 'scss/menu/account/path.scss';
-
-import 'scss/menu/search/object.scss';
-import 'scss/menu/search/text.scss';
-
-import 'scss/menu/preview/object.scss';
-
-import 'scss/menu/block/common.scss';
-import 'scss/menu/block/context.scss';
-import 'scss/menu/block/cover.scss';
-import 'scss/menu/block/icon.scss';
-import 'scss/menu/block/latex.scss';
-import 'scss/menu/block/link.scss';
-import 'scss/menu/block/linkSettings.scss';
-import 'scss/menu/block/mention.scss';
-import 'scss/menu/block/relation.scss';
-
-import 'scss/menu/dataview/calendar.scss';
-import 'scss/menu/dataview/common.scss';
-import 'scss/menu/dataview/create/bookmark.scss';
-import 'scss/menu/dataview/file.scss';
-import 'scss/menu/dataview/filter.scss';
-import 'scss/menu/dataview/group.scss';
-import 'scss/menu/dataview/object.scss';
-import 'scss/menu/dataview/option.scss';
-import 'scss/menu/dataview/relation.scss';
-import 'scss/menu/dataview/sort.scss';
-import 'scss/menu/dataview/source.scss';
-import 'scss/menu/dataview/text.scss';
-import 'scss/menu/dataview/view.scss';
-import 'scss/menu/dataview/template.scss';
+import 'scss/notification/common.scss';
 
 import 'scss/media/print.scss';
-
 import 'scss/theme/dark/common.scss';
 
 import Constant from 'json/constant.json';
@@ -196,6 +46,7 @@ import Routes from 'json/route.json';
 
 const memoryHistory = hs.createMemoryHistory;
 const history = memoryHistory();
+
 interface RouteElement { path: string; };
 
 interface State {
@@ -204,15 +55,22 @@ interface State {
 
 declare global {
 	interface Window {
-		Electron: any;
-		Store: any;
+		isExtension: boolean;
 		$: any;
-		Lib: any;
-		Graph: any;
+		Electron: any;
+		Anytype: any;
 
 		isWebVersion: boolean;
 		Config: any;
-		Renderer: any;
+		AnytypeGlobalConfig: any;
+	}
+};
+
+declare global {
+	namespace JSX {
+		interface IntrinsicElements {
+			['em-emoji']: any;
+		}
 	}
 };
 
@@ -224,28 +82,39 @@ const rootStore = {
 	dbStore,
 	menuStore,
 	popupStore,
+	notificationStore,
 };
 
-window.Store = rootStore;
 window.$ = $;
-window.Lib = {
-	I,
-	C,
-	UtilCommon,
-	UtilData,
-	UtilFile,
-	UtilObject,
-	UtilMenu,
-	analytics,
-	dispatcher,
-	keyboard,
-	Renderer,
-	Preview,
-	Storage,
-	Animation,
-	Onboarding,
-	Survey,
-	Docs,
+
+if (!UtilCommon.getElectron().isPackaged) {
+	window.Anytype = {
+		Store: rootStore,
+		Lib: {
+			I,
+			C,
+			UtilCommon,
+			UtilData,
+			UtilFile,
+			UtilObject,
+			UtilMenu,
+			UtilRouter,
+			UtilSmile,
+			UtilDate,
+			analytics,
+			dispatcher,
+			keyboard,
+			Renderer,
+			Preview,
+			Storage,
+			Animation,
+			Onboarding,
+			Survey,
+			Encode, 
+			Decode,
+			translate,
+		},
+	};
 };
 
 /*
@@ -264,8 +133,8 @@ enableLogging({
 */
 
 Sentry.init({
-	release: window.Electron.version.app,
-	environment: window.Electron.isPackaged ? 'production' : 'development',
+	release: UtilCommon.getElectron().version.app,
+	environment: UtilCommon.getElectron().isPackaged ? 'production' : 'development',
 	dsn: Constant.sentry,
 	maxBreadcrumbs: 0,
 	beforeSend: (e: any) => {
@@ -287,6 +156,7 @@ class RoutePage extends React.Component<RouteComponentProps> {
 				<DragProvider>
 					<ListPopup key="listPopup" {...this.props} />
 					<ListMenu key="listMenu" {...this.props} />
+					<Navigation />
 
 					<Page {...this.props} />
 				</DragProvider>
@@ -320,6 +190,12 @@ class App extends React.Component<object, State> {
 
 	render () {
 		const { loading } = this.state;
+		const platform = UtilCommon.getPlatform();
+
+		let drag = null;
+		if (platform == I.Platform.Mac) {
+			drag = <div id="drag" />;
+		};
 		
 		return (
 			<Router history={history}>
@@ -329,19 +205,19 @@ class App extends React.Component<object, State> {
 							<div id="root-loader" className="loaderWrapper">
 								<div className="inner">
 									<div className="logo anim from" />
-									<div className="version anim from">{window.Electron.version.app}</div>
+									<div className="version anim from">{UtilCommon.getElectron().version.app}</div>
 								</div>
 							</div>
 						) : ''}
 
+						{drag}
+						<div id="tooltipContainer" />
+						<div id="globalFade" />
+
 						<PreviewIndex />
 						<Progress />
 						<Toast />
-						<Navigation />
-
-						<div id="tooltipContainer" />
-						<div id="drag" />
-						<div id="globalFade" />
+						<ListNotification key="listNotification" />
 
 						<Switch>
 							{Routes.map((item: RouteElement, i: number) => (
@@ -358,27 +234,26 @@ class App extends React.Component<object, State> {
 		this.init();
 	};
 
-	componentDidUpdate () {
-	};
-
 	init () {
-		UtilCommon.init(history);
+		UtilRouter.init(history);
 
-		dispatcher.init(window.Electron.getGlobal('serverAddress'));
+		dispatcher.init(UtilCommon.getElectron().getGlobal('serverAddress'));
+		dispatcher.listenEvents();
+
 		keyboard.init();
 
 		this.registerIpcEvents();
 		Renderer.send('appOnLoad');
 
-		console.log('[Process] os version:', window.Electron.version.system, 'arch:', window.Electron.arch);
-		console.log('[App] version:', window.Electron.version.app, 'isPackaged', window.Electron.isPackaged);
+		console.log('[Process] os version:', UtilCommon.getElectron().version.system, 'arch:', UtilCommon.getElectron().arch);
+		console.log('[App] version:', UtilCommon.getElectron().version.app, 'isPackaged', UtilCommon.getElectron().isPackaged);
 	};
 
 	initStorage () {
 		const lastSurveyTime = Number(Storage.get('lastSurveyTime')) || 0;
 
 		if (!lastSurveyTime) {
-			Storage.set('lastSurveyTime', UtilCommon.time());
+			Storage.set('lastSurveyTime', UtilDate.now());
 		};
 
 		Storage.delete('lastSurveyCanceled');
@@ -387,7 +262,7 @@ class App extends React.Component<object, State> {
 	registerIpcEvents () {
 		Renderer.on('init', this.onInit);
 		Renderer.on('keytarGet', this.onKeytarGet);
-		Renderer.on('route', (e: any, route: string) => UtilCommon.route(route, {}));
+		Renderer.on('route', (e: any, route: string) => UtilRouter.go(route, {}));
 		Renderer.on('popup', this.onPopup);
 		Renderer.on('checking-for-update', this.onUpdateCheck);
 		Renderer.on('update-available', this.onUpdateAvailable);
@@ -400,8 +275,9 @@ class App extends React.Component<object, State> {
 		Renderer.on('enter-full-screen', () => commonStore.fullscreenSet(true));
 		Renderer.on('leave-full-screen', () => commonStore.fullscreenSet(false));
 		Renderer.on('config', (e: any, config: any) => commonStore.configSet(config, true));
-		Renderer.on('enter-full-screen', () => { commonStore.fullscreenSet(true); });
-		Renderer.on('leave-full-screen', () => { commonStore.fullscreenSet(false); });
+		Renderer.on('enter-full-screen', () => commonStore.fullscreenSet(true));
+		Renderer.on('leave-full-screen', () => commonStore.fullscreenSet(false));
+		Renderer.on('logout', () => authStore.logout(false, false));
 		Renderer.on('shutdownStart', () => {
 			this.setState({ loading: true });
 
@@ -420,16 +296,23 @@ class App extends React.Component<object, State> {
 			commonStore.nativeThemeSet(isDark);
 			commonStore.themeSet(commonStore.theme);
 		});
+
+		Renderer.on('pin-check', () => {
+			keyboard.setPinChecked(false);
+			UtilRouter.go('/auth/pin-check', { replace: true, animate: true });
+		});
 	};
 
 	onInit (e: any, data: any) {
-		const { dataPath, config, isDark, isChild, route, account, phrase, languages, isPinChecked } = data;
+		const { dataPath, config, isDark, isChild, account, phrase, languages, isPinChecked, css } = data;
 		const win = $(window);
+		const body = $('body');
 		const node = $(this.node);
 		const loader = node.find('#root-loader');
 		const anim = loader.find('.anim');
 		const accountId = Storage.get('accountId');
 		const redirect = Storage.get('redirect');
+		const route = String(data.route || redirect || '');
 
 		commonStore.configSet(config, true);
 		commonStore.nativeThemeSet(isDark);
@@ -446,7 +329,13 @@ class App extends React.Component<object, State> {
 			Storage.delete('redirect');
 		};
 
-		raf(() => { anim.removeClass('from'); });
+		raf(() => anim.removeClass('from'));
+
+		if (css) {
+			UtilCommon.injectCss('anytype-custom-css', css);
+		};
+
+		body.addClass('over');
 
 		const cb = () => {
 			window.setTimeout(() => {
@@ -454,7 +343,10 @@ class App extends React.Component<object, State> {
 
 				window.setTimeout(() => {
 					loader.css({ opacity: 0 });
-					window.setTimeout(() => { loader.remove(); }, 500);
+					window.setTimeout(() => { 
+						loader.remove(); 
+						body.removeClass('over');
+					}, 500);
 				}, 750);
 			}, 2000);
 		};
@@ -464,10 +356,15 @@ class App extends React.Component<object, State> {
 				authStore.phraseSet(phrase);
 
 				UtilData.createSession(() => {
-					commonStore.redirectSet(route || redirect || '');
 					keyboard.setPinChecked(isPinChecked);
+					commonStore.redirectSet(route);
 
-					UtilData.onAuth(account, {}, cb);
+					if (account) {
+						authStore.accountSet(account);
+						commonStore.configSet(account.config, false);
+						UtilData.onInfo(account.info);
+						UtilData.onAuth({}, cb);
+					};
 				});
 
 				win.off('unload').on('unload', (e: any) => {
@@ -483,7 +380,7 @@ class App extends React.Component<object, State> {
 					return false;
 				});
 			} else {
-				commonStore.redirectSet(redirect || '');
+				commonStore.redirectSet(route);
 				Renderer.send('keytarGet', accountId);
 
 				cb();
@@ -509,7 +406,7 @@ class App extends React.Component<object, State> {
 
 		if (value) {
 			authStore.phraseSet(value);
-			UtilCommon.route('/auth/setup/init', { replace: true });
+			UtilRouter.go('/auth/setup/init', { replace: true });
 		} else {
 			Storage.logout();
 		};
@@ -528,7 +425,7 @@ class App extends React.Component<object, State> {
 			popupStore.closeAll();
 		};
 
-		window.setTimeout(() => { popupStore.open(id, param); }, Constant.delay.popup);
+		window.setTimeout(() => popupStore.open(id, param), Constant.delay.popup);
 	};
 
 	onUpdateCheck (e: any, auto: boolean) {
@@ -547,6 +444,8 @@ class App extends React.Component<object, State> {
 
 		popupStore.open('confirm', {
 			data: {
+				icon: 'update',
+				bgColor: 'green',
 				title: translate('popupConfirmUpdatePromptTitle'),
 				text: translate('popupConfirmUpdatePromptText'),
 				textConfirm: translate('popupConfirmUpdatePromptRestartOk'),
@@ -570,6 +469,8 @@ class App extends React.Component<object, State> {
 
 		popupStore.open('confirm', {
 			data: {
+				icon: 'update',
+				bgColor: 'green',
 				title: translate('popupConfirmUpdatePromptTitle'),
 				text: translate('popupConfirmUpdatePromptText'),
 				textConfirm: translate('popupConfirmUpdatePromptOk'),
@@ -593,9 +494,12 @@ class App extends React.Component<object, State> {
 
 		popupStore.open('confirm', {
 			data: {
+				icon: 'updated',
+				bgColor: 'green',
 				title: translate('popupConfirmUpdateDoneTitle'),
-				text: UtilCommon.sprintf(translate('popupConfirmUpdateDoneText'), window.Electron.version.app),
+				text: UtilCommon.sprintf(translate('popupConfirmUpdateDoneText'), UtilCommon.getElectron().version.app),
 				textConfirm: translate('popupConfirmUpdateDoneOk'),
+				colorConfirm: 'blank',
 				canCancel: false,
 			},
 		});
@@ -611,6 +515,8 @@ class App extends React.Component<object, State> {
 
 		popupStore.open('confirm', {
 			data: {
+				icon: 'error',
+				bgColor: 'red',
 				title: translate('popupConfirmUpdateErrorTitle'),
 				text: UtilCommon.sprintf(translate('popupConfirmUpdateErrorText'), Errors[err] || err),
 				textConfirm: translate('commonRetry'),
@@ -634,49 +540,77 @@ class App extends React.Component<object, State> {
 		});
 	};
 
-	onSpellcheck (e: any, param: any) {
-		if (!param.misspelledWord) {
+	onSpellcheck (e: any, misspelledWord: string, dictionarySuggestions: string[], x: number, y: number, rect: any) {
+		if (!misspelledWord) {
 			return;
 		};
 
 		keyboard.disableContextOpen(true);
 
 		const win = $(window);
-		const rootId = keyboard.getRootId();
-		const { focused, range } = focus.state;
-		const options: any = param.dictionarySuggestions.map(it => ({ id: it, name: it }));
-		const obj = Mark.cleanHtml($(`#block-${focused} #value`).html());
-		const value = String(obj.get(0).innerText || '');
+		const options: any = dictionarySuggestions.map(it => ({ id: it, name: it }));
+		const element = $(document.elementFromPoint(x, y));
+		const isInput = element.is('input');
+		const isTextarea = element.is('textarea');
+		const isEditable = element.is('.editable');
 
 		options.push({ id: 'add-to-dictionary', name: translate('spellcheckAdd') });
 
 		menuStore.open('select', {
+			className: 'fromBlock',
+			classNameWrap: 'fromPopup',
 			recalcRect: () => { 
-				const rect = UtilCommon.getSelectionRect();
 				return rect ? { ...rect, y: rect.y + win.scrollTop() } : null; 
 			},
-			onOpen: () => { menuStore.close('blockContext'); },
-			onClose: () => { keyboard.disableContextOpen(false); },
+			onOpen: () => menuStore.close('blockContext'),
+			onClose: () => keyboard.disableContextOpen(false),
 			data: {
 				options,
 				onSelect: (e: any, item: any) => {
 					raf(() => {
-						focus.apply();
-
 						switch (item.id) {
 							default: {
-								blockStore.updateContent(rootId, focused, { text: value });
-								UtilData.blockInsertText(rootId, focused, item.id, range.from, range.to);
+								const { focused, range } = focus.state;
+								const rootId = keyboard.getRootId();
+								const block = blockStore.getLeaf(rootId, focused);
+
+								if (block && block.isText()) {
+									focus.apply();
+
+									const obj = Mark.cleanHtml($(`#block-${focused} #value`).html());
+									const value = String(obj.get(0).innerText || '');
+
+									blockStore.updateContent(rootId, focused, { text: value });
+									UtilData.blockInsertText(rootId, focused, item.id, range.from, range.to);
+								} else 
+								if (isInput || isTextarea || isEditable) {
+									let value = '';
+									if (isInput || isTextarea) {
+										value = String(element.val());
+									} else 
+									if (isEditable) {
+										value = String((element.get(0) as any).innerText || '');
+									};
+;
+									value = value.replace(new RegExp(`${misspelledWord}`, 'g'), item.id);
+
+									if (isInput || isTextarea) {
+										element.val(value);
+									} else 
+									if (isEditable) {
+										element.text(value);
+									};
+								};
 								break;
 							};
 
 							case 'add-to-dictionary': {
-								Renderer.send('spellcheckAdd', param.misspelledWord);
+								Renderer.send('spellcheckAdd', misspelledWord);
 								break;
 							};
 
 							case 'disable-spellcheck': {
-								Renderer.send('setLanguage', []);
+								Renderer.send('setSpellingLang', []);
 								break;
 							};
 						};

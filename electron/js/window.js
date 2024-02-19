@@ -22,9 +22,8 @@ class WindowManager {
 	list = new Set();
 
 	create (options, param) {
-		const Api = require('./api.js');
 		const { route, isChild } = options;
-		const { languages, zoom } = ConfigManager.config;
+		const { hideMenuBar } = ConfigManager.config;
 
 		param = Object.assign({
 			backgroundColor: Util.getBgColor('dark'),
@@ -54,7 +53,7 @@ class WindowManager {
 			win = null;
 		});
 
-		win.once('ready-to-show', () => { win.show(); });
+		win.once('ready-to-show', () => win.show());
 		win.on('focus', () => { 
 			UpdateManager.setWindow(win);
 			MenuManager.setWindow(win); 
@@ -62,10 +61,14 @@ class WindowManager {
 		win.on('enter-full-screen', () => Util.send(win, 'enter-full-screen'));
 		win.on('leave-full-screen', () => Util.send(win, 'leave-full-screen'));
 
-		win.webContents.on('context-menu', (e, param) => Util.send(win, 'spellcheck', param));
+		win.webContents.on('context-menu', (e, param) => {
+			Util.send(win, 'spellcheck', param.misspelledWord, param.dictionarySuggestions, param.x, param.y, param.selectionRect);
+		});
 
-		Api.setLanguage(win, languages);
-		Api.setZoom(win, zoom);
+		if (hideMenuBar) {
+			win.setMenuBarVisibility(false);
+			win.setAutoHideMenuBar(true);
+		};
 
 		return win;
 	};
@@ -95,7 +98,7 @@ class WindowManager {
 			param.trafficLightPosition = { x: 20, y: 18 };
 		} else
 		if (is.windows) {
-			param.icon = path.join(Util.imagePath(), 'icon32x32.png');
+			param.icon = path.join(Util.imagePath(), 'icons', '256x256.ico');
 		} else
 		if (is.linux) {
 			param.icon = image;
@@ -124,41 +127,13 @@ class WindowManager {
 			state.manage(win);
 		};
 
-		if (is.development) {
-			win.loadURL(`http://localhost:${port}`);
-			win.toggleDevTools();
-		} else {
-			win.loadURL('file://' + path.join(Util.appPath, 'dist', 'index.html'));
-		};
-
+		win.loadURL(is.development ? `http://localhost:${port}` : 'file://' + path.join(Util.appPath, 'dist', 'index.html'));
 		win.on('enter-full-screen', () => MenuManager.initMenu());
 		win.on('leave-full-screen', () => MenuManager.initMenu());
 
-		return win;
-	};
-
-	createAbout () {
-		const win = this.create({}, { 
-			width: 400, 
-			height: 400, 
-			useContentSize: true,
-			backgroundColor: Util.getBgColor(Util.getTheme()),
-		});
-
-		win.loadURL('file://' + path.join(Util.electronPath(), 'about', `index.html?version=${version}&theme=${Util.getTheme()}&lang=${Util.getLang()}`));
-		win.setMenu(null);
-
-		win.webContents.on('will-navigate', (e, url) => {
-			e.preventDefault();
-			// eslint-disable-next-line no-undef
-			shell.openExternal(url);
-		});
-
-		win.webContents.on('new-window', (e, url) => {
-			e.preventDefault();
-			// eslint-disable-next-line no-undef
-			shell.openExternal(url);
-		});
+		if (is.development) {
+			win.toggleDevTools();
+		};
 
 		return win;
 	};
@@ -203,16 +178,11 @@ class WindowManager {
 		};
 	};
 
-	updateTheme () {
-		this.list.forEach(it => {
-			Util.send(it, 'native-theme', Util.isDarkTheme());
-		});
-	};
-
 	getWindowPosition (param, displayWidth, displayHeight) {
+		const currentWindow = BrowserWindow.getFocusedWindow();
+
 		let x = Math.round(displayWidth / 2 - param.width / 2);
 		let y = Math.round(displayHeight / 2 - param.height / 2 + 20);
-		const currentWindow = BrowserWindow.getFocusedWindow();
 
 		if (currentWindow) {
 			const [xPos, yPos] = currentWindow.getPosition();
@@ -230,6 +200,17 @@ class WindowManager {
 		};
 
 		return { x, y };
+	};
+
+	sendToAll () {
+		const args = [ ...arguments ];
+		this.list.forEach(it => {
+			Util.send.apply(this, [ it ].concat(args));
+		});
+	};
+
+	reloadAll () {
+		this.list.forEach(it => it.webContents.reload());
 	};
 
 };

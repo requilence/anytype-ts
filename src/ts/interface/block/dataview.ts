@@ -24,6 +24,8 @@ export enum ViewType {
 	List	 = 1,
 	Gallery	 = 2,
 	Board	 = 3,
+	Calendar = 4,
+	Graph	 = 5,
 };
 
 export enum SortType { 
@@ -85,6 +87,7 @@ export interface Filter {
 	relationKey: string;
 	operator: FilterOperator;
 	condition: FilterCondition;
+	format?: I.RelationType;
 	quickOption?: FilterQuickOption;
 	value: any;
 };
@@ -102,7 +105,6 @@ export interface ViewComponent {
 	rootId?: string;
 	block?: I.Block;
 	readonly: boolean;
-	bodyContainer?: string;
 	pageContainer?: string;
 	dataset?: I.Dataset;
 	isPopup?: boolean;
@@ -110,10 +112,10 @@ export interface ViewComponent {
 	isCollection?: boolean;
 	className?: string;
 	refCells?: any;
+	record?: any;
 	onRef?(ref: any, id: string): void;
 	loadData(viewId: string, offset: number, clear: boolean, callBack?: (message: any) => void): void;
 	getRecords?(): string[];
-	getRecord(id: string): any;
 	getCoverObject?(id: string): any;
 	getView?(): View;
 	getSources?(): string[];
@@ -135,13 +137,14 @@ export interface ViewComponent {
 	onSelectToggle?: (e: React.MouseEvent, id: string) => void;
 	onSelectEnd?: () => void;
 	isAllowedObject?: () => boolean;
-	isAllowedTemplate?: () => boolean;
 	isAllowedDefaultType?: () => boolean;
 	objectOrderUpdate?: (orders: any[], records: any[], callBack?: (message: any) => void) => void;
 	applyObjectOrder?: (groupId: string, records: any[]) => any[];
 	onSourceSelect?(element: any, param: Partial<I.MenuParam>): void;
 	onSourceTypeSelect?(element: any): void;
+	onViewSettings?(): void;
 	getSearchIds?(): string[];
+	canCellEdit?(relationKey: string, recordId: string): boolean;
 };
 
 export interface ViewEmpty {
@@ -173,10 +176,10 @@ export interface View {
 	defaultTypeId?: string;
 	getVisibleRelations?: () => I.ViewRelation[];
 	getRelation?: (relationKey: string) => I.ViewRelation;
-	isGrid?: () => boolean;
-	isList?: () => boolean;
-	isGallery?: () => boolean;
-	isBoard?: () => boolean;
+	isGrid?(): boolean;
+	isList?(): boolean;
+	isGallery?(): boolean;
+	isBoard?(): boolean;
 };
 
 export interface Cell {
@@ -187,29 +190,30 @@ export interface Cell {
 	idPrefix?: string;
 	relation?: any;
 	relationKey?: string;
-	recordId: string;
 	viewType: I.ViewType;
 	readonly?: boolean;
 	canOpen?: boolean;
 	canEdit?: boolean;
-	bodyContainer?: string;
 	pageContainer?: string;
 	isInline?: boolean;
 	iconSize?: number;
 	placeholder?: string;
 	withLabel?: boolean;
+	withName?: boolean;
 	textLimit?: number;
 	arrayLimit?: number;
 	shortUrl?: boolean;
+	menuClassName?: string;
+	menuClassNameWrap?: string;
+	record?: any;
 	getView?(): View;
-	getRecord(id: string): any;
 	onChange?(value: any, callBack?: (message: any) => void): void;
 	onClick?(e: any): void;
 	onMouseEnter?(e: any): void;
 	onMouseLeave?(e: any): void;
-	onCellChange?: (id: string, key: string, value: any, callBack?: (message: any) => void) => void;
-	cellPosition?: (cellId: string) => void;
-	elementMapper?: (relation: any, item: any) => any;
+	onCellChange?(id: string, key: string, value: any, callBack?: (message: any) => void): void;
+	cellPosition?(cellId: string): void;
+	elementMapper?(relation: any, item: any): any;
 };
 
 export interface BoardGroup {

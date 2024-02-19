@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { Icon, Title, Label } from 'Component';
-import { I, UtilCommon, translate, Action } from 'Lib';
+import { I, UtilCommon, translate, Action, UtilMenu } from 'Lib';
 import { observer } from 'mobx-react';
-
+import Constant from 'json/constant.json';
 import Head from '../head';
 
 interface Props extends I.PopupSettings {
@@ -17,8 +17,8 @@ const PopupSettingsPageImportIndex = observer(class PopupSettingsPageImportIndex
 
 		const Item = (item: any) => {
 			return (
-				<div className={[ 'item', item.id ].join(' ')} onClick={() => { this.onClick(item.id); }} >
-					<Icon />
+				<div className={[ 'item', item.id ].join(' ')} onClick={() => this.onClick(item.id)} >
+					<Icon className={`import-${item.id}`} />
 					<div className="name">{item.name}</div>
 				</div>
 			);
@@ -40,48 +40,21 @@ const PopupSettingsPageImportIndex = observer(class PopupSettingsPageImportIndex
 	};
 
 	onClick (id: string) {
-		const { onPage } = this.props;
+		const { onPage, close } = this.props;
 		const items = this.getItems();
 		const item = items.find(it => it.id == id);
-		const fn = UtilCommon.toCamelCase('onImport-' + item.id);
+		const common = [ I.ImportType.Html, I.ImportType.Text, I.ImportType.Protobuf, I.ImportType.Markdown ];
 
-		if (this[fn]) {
-			this[fn]();
+		if (common.includes(item.format)) {
+			Action.import(item.format, Constant.fileExtension.import[item.format]);
+			close();
 		} else {
 			onPage(UtilCommon.toCamelCase('import-' + item.id));
 		};
 	};
 
 	getItems () {
-		return [
-			{ id: 'notion', name: 'Notion' },
-			{ id: 'markdown', name: 'Markdown' },
-			{ id: 'html', name: 'HTML' },
-			{ id: 'text', name: 'TXT' },
-			{ id: 'protobuf', name: 'Any-Block' },
-			{ id: 'csv', name: 'CSV' },
-		];
-	};
-
-	onImportCommon (type: I.ImportType, extensions: string[], options?: any) {
-		Action.import(type, extensions, options);
-		this.props.close();
-	};
-
-	onImportHtml () {
-		this.onImportCommon(I.ImportType.Html, [ 'zip', 'html', 'htm', 'mhtml' ]);
-	};
-
-	onImportText () {
-		this.onImportCommon(I.ImportType.Text, [ 'zip', 'txt' ]);
-	};
-
-	onImportProtobuf () {
-		this.onImportCommon(I.ImportType.Protobuf, [ 'zip', 'pb', 'json' ]);
-	};
-
-	onImportMarkdown () {
-		this.onImportCommon(I.ImportType.Markdown, [ 'zip', 'md' ]);
+		return UtilMenu.getImportFormats();
 	};
 
 });

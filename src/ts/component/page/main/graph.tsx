@@ -1,9 +1,9 @@
 import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
-import { I, C, UtilCommon, UtilMenu, analytics, UtilData, UtilObject, keyboard, translate, Action } from 'Lib';
+import { I, C, UtilCommon, UtilMenu, UtilData, UtilObject, keyboard } from 'Lib';
 import { Header, Footer, Graph, Loader } from 'Component';
-import { detailStore, menuStore, commonStore } from 'Store';
+import { detailStore, commonStore } from 'Store';
 import Constant from 'json/constant.json';
 
 const PageMainGraph = observer(class PageMainGraph extends React.Component<I.PageComponent> {
@@ -23,10 +23,6 @@ const PageMainGraph = observer(class PageMainGraph extends React.Component<I.Pag
 	constructor (props: I.PageComponent) {
 		super(props);
 
-		this.onClickObject = this.onClickObject.bind(this);
-		this.onContextMenu = this.onContextMenu.bind(this);
-		this.onContextSpaceClick = this.onContextSpaceClick.bind(this);
-		this.onSelect = this.onSelect.bind(this);
 		this.onTab = this.onTab.bind(this);
 	};
 
@@ -55,12 +51,9 @@ const PageMainGraph = observer(class PageMainGraph extends React.Component<I.Pag
 						key="graph"
 						{...this.props} 
 						ref={ref => this.refGraph = ref} 
+						id="global"
 						rootId={rootId} 
 						data={this.data}
-						onClick={this.onClickObject}
-						onSelect={this.onSelect}
-						onContextMenu={this.onContextMenu}
-						onContextSpaceClick={this.onContextSpaceClick}
 					/>
 				</div>
 
@@ -74,8 +67,6 @@ const PageMainGraph = observer(class PageMainGraph extends React.Component<I.Pag
 		this.resize();
 		this.load();
 		this.initRootId(this.getRootId());
-
-		window.Graph = this;
 	};
 
 	componentDidUpdate () {
@@ -83,7 +74,7 @@ const PageMainGraph = observer(class PageMainGraph extends React.Component<I.Pag
 
 		if (this.loading) {
 			window.clearTimeout(this.timeoutLoading);
-			this.timeoutLoading = window.setTimeout(() => { this.setLoading(false); }, 100);
+			this.timeoutLoading = window.setTimeout(() => this.setLoading(false), 100);
 		};
 	};
 
@@ -102,42 +93,19 @@ const PageMainGraph = observer(class PageMainGraph extends React.Component<I.Pag
 		this.unbind();
 		win.on(`keydown.graphPage`, e => this.onKeyDown(e));
 		win.on('updateGraphRoot.graphPage', (e: any, data: any) => this.initRootId(data.id));
-		win.on('removeGraphNode.graphPage', (e: any, data: any) => { 
-			this.refGraph?.send('onRemoveNode', { ids: UtilCommon.objectCopy(data.ids) });
-		});
 		win.on('sidebarResize.graphPage', () => this.resize());
 	};
 
-	initRootId (id: string) {
-		this.rootId = id; 
-		this.refHeader.refChild.setRootId(id);
-	};
-
 	onKeyDown (e: any) {
-		const length = this.ids.length;
-		if (!length) {
-			return;
-		};
+		const cmd = keyboard.cmdKey();
 
-		keyboard.shortcut('escape', e, () => {
-			this.ids = [];
-			this.refGraph?.send('onSetSelected', { ids: [] });
-		});
-
-		if (this.ids.length) {
-			keyboard.shortcut('backspace, delete', e, () => {
-				Action.archive(this.ids, () => {
-					this.data.nodes = this.data.nodes.filter(d => !this.ids.includes(d.id));
-					this.refGraph?.send('onRemoveNode', { ids: this.ids });
-				});
-			});
-		};
+		keyboard.shortcut(`${cmd}+f`, e, () => $('#button-header-search').trigger('click'));
 	};
 
 	load () {
 		this.setLoading(true);
 
-		C.ObjectGraph(UtilData.graphFilters(), 0, [], Constant.graphRelationKeys, (message: any) => {
+		C.ObjectGraph(commonStore.space, UtilData.graphFilters(), 0, [], Constant.graphRelationKeys, (message: any) => {
 			if (message.error.code) {
 				return;
 			};
@@ -158,6 +126,13 @@ const PageMainGraph = observer(class PageMainGraph extends React.Component<I.Pag
 			for (const edge of this.data.edges) {
 				const idx = this.data.edges.findIndex(d => (d.source == edge.target) && (d.target == edge.source));
 				if (idx >= 0) {
+					const double = this.data.edges[idx];
+
+					if ((edge.type == I.EdgeType.Link) && (double.type == I.EdgeType.Relation)) {
+						edge.type = double.type;
+						edge.name = double.name;
+					};
+
 					edge.isDouble = true;
 					this.data.edges.splice(idx, 1);
 				};
@@ -192,7 +167,7 @@ const PageMainGraph = observer(class PageMainGraph extends React.Component<I.Pag
 			loader.show().css({ opacity: 1 });
 		} else {
 			loader.css({ opacity: 0 });
-			window.setTimeout(() => { loader.hide(); }, 200);
+			window.setTimeout(() => loader.hide(), 200);
 		};
 	};
 
@@ -221,151 +196,14 @@ const PageMainGraph = observer(class PageMainGraph extends React.Component<I.Pag
 		};
 	};
 
-	onClickObject (id: string) {
-		this.ids = [];
-		this.refGraph?.send('onSetSelected', { ids: [] });
-		
-		UtilObject.openAuto(this.data.nodes.find(d => d.id == id));
+	initRootId (id: string) {
+		this.rootId = id; 
+		this.refHeader.refChild.setRootId(id);
 	};
 
 	getRootId () {
 		const { rootId, match } = this.props;
 		return this.rootId || (rootId ? rootId : match.params.id);
-	};
-
-	onSelect (id: string, related?: string[]) {
-		const isSelected = this.ids.includes(id);
-
-		let ids = [ id ];
-
-		if (related && related.length) {
-			if (!isSelected) {
-				this.ids = [];
-			};
-
-			ids = ids.concat(related);
-		};
-
-		ids.forEach((id) => {
-			if (isSelected) {
-				this.ids = this.ids.filter(it => it != id);
-				return;
-			};
-
-			this.ids = this.ids.includes(id) ? this.ids.filter(it => it != id) : this.ids.concat([ id ]);
-		});
-
-		this.refGraph?.send('onSetSelected', { ids: this.ids });
-	};
-
-	getNode (id: string) {
-		return this.data.nodes.find(d => d.id == id);
-	};
-
-	addNewNode (id: string, cb: (target: any) => void) {
-		UtilObject.getById(id, (object: any) => {
-			if (!this.refGraph) {
-				return;
-			};
-
-			const target = this.refGraph.nodeMapper(object);
-
-			this.data.nodes.push(target);
-			this.refGraph.nodes.push(target);
-
-			cb(target);
-		});
-	};
-
-	onContextMenu (id: string, param: any) {
-		const ids = this.ids.length ? this.ids : [ id ];
-
-		menuStore.open('dataviewContext', {
-			...param,
-			data: {
-				route: 'Graph',
-				subId: Constant.subId.graph,
-				objectIds: ids,
-				getObject: id => this.getNode(id),
-				onLinkTo: (sourceId: string, targetId: string) => {
-					const target = this.getNode(targetId);
-					if (target) {
-						this.data.edges.push(this.refGraph?.edgeMapper({ type: I.EdgeType.Link, source: sourceId, target: targetId }));
-						this.refGraph?.send('onSetEdges', { edges: this.data.edges });
-					} else {
-						this.addNewNode(targetId, target => this.refGraph?.send('onAddNode', { target, sourceId }));
-					};
-				},
-				onSelect: (itemId: string) => {
-					switch (itemId) {
-						case 'archive': {
-							this.data.nodes = this.data.nodes.filter(d => !ids.includes(d.id));
-							this.refGraph?.send('onRemoveNode', { ids });
-							break;
-						};
-
-						case 'fav': {
-							ids.forEach((id: string) => {
-								const node = this.getNode(id);
-								
-								if (node) {
-									node.isFavorite = true;
-								};
-							});
-							this.refGraph?.send('onSetEdges', { edges: this.data.edges });
-							break;
-						};
-
-						case 'unfav': {
-							ids.forEach((id: string) => {
-								const node = this.getNode(id);
-								
-								if (node) {
-									node.isFavorite = false;
-								};
-							});
-							break;
-						};
-					};
-
-					this.ids = [];
-					this.refGraph?.send('onSetSelected', { ids: this.ids });
-				},
-			}
-		});
-	};
-
-	onContextSpaceClick (param: any, data: any) {
-		menuStore.open('select', {
-			...param,
-			data: {
-				options: [
-					{ id: 'newObject', name: translate('pageMainGraphNewObject') },
-				],
-				onSelect: (e: any, item: any) => {
-					switch (item.id) {
-						case 'newObject': {
-							UtilObject.create('', '', {}, I.BlockPosition.Bottom, '', {}, [ I.ObjectFlag.SelectType ], (message: any) => {
-								UtilObject.openPopup({ id: message.targetId }, {
-									onClose: () => {
-										this.addNewNode(message.targetId, target => {
-											target = Object.assign(target, { x: data.x, y: data.y });
-											this.refGraph?.send('onAddNode', { target });
-										});
-									}
-								});
-
-								analytics.event('CreateObject', { 
-									objectType: commonStore.type, 
-									route: 'Graph',
-								});
-							});
-							break;
-						};
-					};
-				},
-			}
-		});
 	};
 
 	onTab (id: string) {

@@ -3,7 +3,7 @@ import $ from 'jquery';
 import raf from 'raf';
 import { observer } from 'mobx-react';
 import { Header, Loader, Block, Deleted } from 'Component';
-import { I, C, UtilCommon, Action, UtilObject, translate } from 'Lib';
+import { I, C, UtilCommon, Action, UtilObject, translate, UtilRouter } from 'Lib';
 import { blockStore, detailStore } from 'Store';
 import Errors from 'json/error.json';
 
@@ -89,11 +89,12 @@ const PageMainBlock = observer(class PageMainBlock extends React.Component<I.Pag
 			return;
 		};
 
+		this.close();
 		this.id = rootId;
 		this.loading = true;
 		this.forceUpdate();
 
-		C.ObjectOpen(rootId, '', (message: any) => {
+		C.ObjectOpen(rootId, '', UtilRouter.getRouteSpaceId(), (message: any) => {
 			if (message.error.code) {
 				if (message.error.code == Errors.Code.NOT_FOUND) {
 					this.setState({ isDeleted: true });
@@ -121,15 +122,18 @@ const PageMainBlock = observer(class PageMainBlock extends React.Component<I.Pag
 	};
 
 	close () {
+		if (!this.id) {
+			return;
+		};
+
 		const { isPopup, match } = this.props;
-		const rootId = this.getRootId();
 		
 		let close = true;
-		if (isPopup && (match.params.id == rootId)) {
+		if (isPopup && (match.params.id == this.id)) {
 			close = false;
 		};
 		if (close) {
-			Action.pageClose(rootId, true);
+			Action.pageClose(this.id, true);
 		};
 	};
 

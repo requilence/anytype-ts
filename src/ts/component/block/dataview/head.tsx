@@ -2,7 +2,7 @@ import * as React from 'react';
 import { observer } from 'mobx-react';
 import { Icon, Editable } from 'Component';
 import { I, C, keyboard, UtilObject, analytics, translate, UtilCommon } from 'Lib';
-import { menuStore, detailStore } from 'Store';
+import { menuStore, detailStore, commonStore } from 'Store';
 import Constant from 'json/constant.json';
 
 interface State {
@@ -43,6 +43,7 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 		const { targetObjectId } = block.content;
 		const object = getTarget();
 		const cn = [ 'dataviewHead' ];
+		const placeholder = isCollection ? translate('defaultNameCollection') : translate('defaultNameSet');
 
 		if (className) {
 			cn.push(className);
@@ -69,7 +70,7 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 					ref={ref => this.ref = ref}
 					id="value"
 					readonly={readonly || !isEditing}
-					placeholder={UtilObject.defaultName(isCollection ? 'Collection' : 'Set')}
+					placeholder={placeholder}
 					onFocus={this.onFocus}
 					onMouseDown={this.onTitle}
 					onBlur={this.onBlur}
@@ -91,8 +92,10 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 		this.setValue();
 
 		if (this.state.isEditing && this.ref) {
-			const l = this.getValue().length;
-			this.ref.setRange(this.range || { from: l, to: l });
+			window.setTimeout(() => { 
+				const l = this.getValue().length;
+				this.ref.setRange(this.range || { from: l, to: l });
+			}, 15);
 		};
 	};
 
@@ -166,6 +169,11 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 				window.setTimeout(() => loadData(message.views[0].id, 0, true), 50);
 			};
 
+			if (isNew) {
+				this.menuContext?.close();
+				this.setEditing(true);
+			};
+
 			analytics.event('InlineSetSetSource', { type: isNew ? 'newObject' : 'externalObject' });
 		};
 
@@ -174,24 +182,24 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 
 		if (isCollection) {
 			filters = filters.concat([
-				{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.typeId.collection },
+				{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Collection },
 			]);
 
 			addParam.name = translate('blockDataviewCreateNewCollection');
 			addParam.onClick = () => {
-				C.ObjectCreate({ layout: I.ObjectLayout.Collection, type: Constant.typeId.collection }, [], '', (message: any) => { 
+				C.ObjectCreate({ layout: I.ObjectLayout.Collection }, [], '', Constant.typeKey.collection, commonStore.space, (message: any) => { 
 					C.BlockDataviewCreateFromExistingObject(rootId, block.id, message.objectId, (message: any) => onCreate(message, true));
 				});
 			};
 		} else {
 			filters = filters.concat([
-				{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.typeId.set },
+				{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Set },
 				{ operator: I.FilterOperator.And, relationKey: 'setOf', condition: I.FilterCondition.NotEmpty, value: null },
 			]);
 
 			addParam.name = translate('blockDataviewCreateNewSet');
 			addParam.onClick = () => {
-				C.ObjectCreateSet([], {}, '', (message: any) => {
+				C.ObjectCreateSet([], {}, '', commonStore.space, (message: any) => {
 					C.BlockDataviewCreateFromExistingObject(rootId, block.id, message.objectId, (message: any) => {
 						$(this.node).find('#head-source-select').trigger('click');
 						onCreate(message, true);
@@ -235,13 +243,10 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 
 		const { getTarget } = this.props;
 		const object = getTarget();
-		const length = this.getValue().length;
 
 		switch (item.id) {
 			case 'editTitle': {
-				this.setState({ isEditing: true }, () => {
-					this.ref.setRange({ from: length, to: length });
-				});
+				this.setEditing(true);
 				break;
 			};
 
@@ -268,7 +273,7 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 		keyboard.setFocus(false);
 
 		this.save();
-		window.setTimeout(() => { this.setState({ isEditing: false }); }, 40);
+		window.setTimeout(() => this.setEditing(false), 40);
 	};
 
 	onKeyDown (e: any) {
@@ -297,7 +302,11 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 		const object = getTarget();
 
 		let name = String(object.name || '');
-		if ((name == UtilObject.defaultName('Page')) || (name == UtilObject.defaultName('Set'))) {
+		if ([ 
+			translate('defaultNamePage'), 
+			translate('defaultNameSet'), 
+			translate('defaultNameCollection'),
+		].includes(name)) {
 			name = '';
 		};
 
@@ -323,42 +332,37 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 		const { block, getTarget } = this.props;
 		const { targetObjectId } = block.content;
 		const object = getTarget();
+
+		if (!targetObjectId) {
+			return;
+		};
 		
 		let value = this.getValue();
-
 		if (value == object.name) {
 			return;
 		};
 
-		if ((value == UtilObject.defaultName('Page')) || (value == UtilObject.defaultName('Set'))) {
+		if ([ 
+			translate('defaultNamePage'), 
+			translate('defaultNameSet'), 
+			translate('defaultNameCollection'),
+		].includes(value)) {
 			value = '';
 		};
 
 		if (targetObjectId) {
-			UtilObject.setName(targetObjectId, this.getValue());
+			UtilObject.setName(targetObjectId, value);
 		};
 		
-		if (this.ref) {
-			this.ref.placeholderHide();
-		};
+		this.ref?.placeholderCheck();
 	};
 
 	onIconSelect (icon: string) {
-		const { block } = this.props;
-		const { targetObjectId } = block.content;
-
-		if (targetObjectId) {
-			UtilObject.setIcon(targetObjectId, icon, '');
-		};
+		UtilObject.setIcon(this.props.block.content.targetObjectId, icon, '');
 	};
 
-	onIconUpload (hash: string) {
-		const { block } = this.props;
-		const { targetObjectId } = block.content;
-
-		if (targetObjectId) {
-			UtilObject.setIcon(targetObjectId, '', hash);
-		};
+	onIconUpload (objectId: string) {
+		UtilObject.setIcon(this.props.block.content.targetObjectId, '', objectId);
 	};
 
 	onFullscreen () {
@@ -366,6 +370,10 @@ const Head = observer(class Head extends React.Component<I.ViewComponent, State>
 
 		UtilObject.openPopup({ layout: I.ObjectLayout.Block, id: rootId, _routeParam_: { blockId: block.id } });
 		analytics.event('InlineSetOpenFullscreen');
+	};
+
+	setEditing (v: boolean) {
+		this.setState({ isEditing: v });
 	};
 
 });

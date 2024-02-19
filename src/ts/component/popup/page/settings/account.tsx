@@ -1,7 +1,7 @@
 import * as React from 'react';
-import { IconObject, Input, Title, Loader, Icon } from 'Component';
-import { I, C, translate, UtilCommon, Action, UtilObject } from 'Lib';
-import { authStore, detailStore, blockStore, menuStore } from 'Store';
+import { IconObject, Input, Title, Loader, Icon, Error } from 'Component';
+import { I, C, translate, UtilCommon, Action, UtilObject, UtilRouter } from 'Lib';
+import { authStore, detailStore, blockStore, menuStore, commonStore } from 'Store';
 import { observer } from 'mobx-react';
 import Constant from 'json/constant.json';
 
@@ -38,12 +38,17 @@ const PopupSettingsPageAccount = observer(class PopupSettingsPageAccount extends
 	render () {
 		const { error, loading } = this.state;
 		const { account } = authStore;
-		const profile = detailStore.get(Constant.subId.profile, blockStore.profile);
+		const profile = UtilObject.getProfile();
+	
+		let name = profile.name;
+		if (name == translate('defaultNamePage')) {
+			name = '';
+		};
 
 		return (
 			<div className="sections">
 				<div className="section top">
-					{error ? <div className="message">{error}</div> : ''}
+					<Error text={error} />
 
 					<div className="iconWrapper">
 						{loading ? <Loader /> : ''}
@@ -61,7 +66,7 @@ const PopupSettingsPageAccount = observer(class PopupSettingsPageAccount extends
 
 					<Input
 						ref={ref => this.refName = ref}
-						value={profile.name}
+						value={name}
 						onKeyUp={this.onName}
 						placeholder={translate('popupSettingsAccountPersonalInformationNamePlaceholder')}
 					/>
@@ -81,7 +86,7 @@ const PopupSettingsPageAccount = observer(class PopupSettingsPageAccount extends
 						<Input
 							value={account.id}
 							readonly={true}
-							onClick={() => UtilCommon.copyToast(translate('popupSettingsAccountAnytypeIdentityAccountId'), account.id)}
+							onClick={() => UtilCommon.copyToast(translate('popupSettingsAccountAnytypeIdentityTitle'), account.id)}
 						/>
 						<Icon className="copy" />
 					</div>
@@ -106,7 +111,7 @@ const PopupSettingsPageAccount = observer(class PopupSettingsPageAccount extends
 			properties: [ 'openDirectory' ],
 		};
 
-		window.Electron.showOpenDialog(options).then((result: any) => {
+		UtilCommon.getElectron().showOpenDialog(options).then((result: any) => {
 			const files = result.filePaths;
 			if ((files == undefined) || !files.length) {
 				return;
@@ -117,7 +122,7 @@ const PopupSettingsPageAccount = observer(class PopupSettingsPageAccount extends
 				if (message.error.code) {
 					this.setState({ error: message.error.description });
 				} else {
-					UtilCommon.route('/auth/setup/init', {}); 
+					UtilRouter.go('/auth/setup/init', {}); 
 				};
 				setLoading(false);
 			});
@@ -162,17 +167,17 @@ const PopupSettingsPageAccount = observer(class PopupSettingsPageAccount extends
     };
 
     onUpload () {
-		Action.openFile(Constant.extension.cover, paths => {
+		const { accountSpaceId } = authStore;
+
+		Action.openFile(Constant.fileExtension.cover, paths => {
 			this.setState({ loading: true });
 
-            C.FileUpload('', paths[0], I.FileType.Image, (message: any) => {
-                if (message.error.code) {
-                    return;
+            C.FileUpload(accountSpaceId, '', paths[0], I.FileType.Image, {}, (message: any) => {
+                if (!message.error.code) {
+					UtilObject.setIcon(blockStore.profile, '', message.objectId, () => {
+						this.setState({ loading: false });
+					});
                 };
-
-                UtilObject.setIcon(blockStore.profile, '', message.hash, () => {
-                    this.setState({ loading: false });
-                });
             });
 		});
     };

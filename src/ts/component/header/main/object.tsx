@@ -1,11 +1,20 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
-import { Icon, IconObject, Sync, ObjectName, Label } from 'Component';
-import { I, UtilObject, keyboard, sidebar, translate, Action } from 'Lib';
-import { blockStore, detailStore, popupStore, dbStore } from 'Store';
+import { Icon, IconObject, Sync, ObjectName } from 'Component';
+import { I, UtilObject, UtilData, keyboard, sidebar, translate } from 'Lib';
+import { blockStore, detailStore, popupStore } from 'Store';
+import HeaderBanner from 'Component/page/elements/head/banner';
 import Constant from 'json/constant.json';
 
-const HeaderMainObject = observer(class HeaderMainObject extends React.Component<I.HeaderComponent> {
+interface State {
+	templatesCnt: number;
+};
+
+const HeaderMainObject = observer(class HeaderMainObject extends React.Component<I.HeaderComponent, State> {
+
+	state = {
+		templatesCnt: 0
+	};
 
 	constructor (props: I.HeaderComponent) {
 		super(props);
@@ -14,46 +23,36 @@ const HeaderMainObject = observer(class HeaderMainObject extends React.Component
 		this.onMore = this.onMore.bind(this);
 		this.onSync = this.onSync.bind(this);
 		this.onOpen = this.onOpen.bind(this);
+		this.updateTemplatesCnt = this.updateTemplatesCnt.bind(this);
 	};
 
 	render () {
-		const { rootId, onSearch, onTooltipShow, onTooltipHide } = this.props;
+		const { rootId, onSearch, onTooltipShow, onTooltipHide, isPopup } = this.props;
+		const { templatesCnt } = this.state;
 		const root = blockStore.getLeaf(rootId, rootId);
-		const object = detailStore.get(rootId, rootId, [ 'templateIsBundled', 'type', 'targetObjectType' ]);
+		const object = detailStore.get(rootId, rootId, Constant.templateRelationKeys);
 		const isLocked = root ? root.isLocked() : false;
-		const showMenu = !UtilObject.isStoreType(object.type);
+		const showMenu = !UtilObject.isTypeOrRelationLayout(object.layout);
 		const canSync = showMenu && !object.templateIsBundled;
 		const cmd = keyboard.cmdSymbol();
+		const allowedTemplateSelect = (object.internalFlags || []).includes(I.ObjectFlag.SelectTemplate);
+		const bannerProps: any = {};
 
 		let center = null;
+		let banner = I.BannerType.None;
 
 		if (object.isArchived) {
-			center = (
-				<div className="headerBanner">
-					<div className="content">
-						<Label text={translate('deletedBanner')} />
-					</div>
-					<div className="action" onClick={e => Action.restore([ object.id ])}>{translate('deletedBannerRestore')}</div>
-				</div>
-			);
+			banner = I.BannerType.IsArchived;
 		} else
 		if (UtilObject.isTemplate(object.type)) {
-			const type = dbStore.getType(object.targetObjectType);
-			center = (
-				<div className="headerBanner">
-					<div className="content">
-						<Label text={translate('templateBannner')} />
-						{type ? (
-							<div className="typeName" onClick={() => UtilObject.openAuto(type)}>
-								{translate('commonOf')}
-								<IconObject size={18} object={type} />
-								<ObjectName object={type} />
-							</div>
-						) : ''}
-					</div>
-				</div>
-			);
-		} else {
+			banner = I.BannerType.IsTemplate;
+		} else
+		if (allowedTemplateSelect && templatesCnt) {
+			banner = I.BannerType.TemplateSelect;
+			bannerProps.count = templatesCnt + 1;
+		};
+
+		if (banner == I.BannerType.None) {
 			center = (
 				<div
 					id="path"
@@ -69,19 +68,21 @@ const HeaderMainObject = observer(class HeaderMainObject extends React.Component
 					</div>
 				</div>
 			);
+		} else {
+			center = <HeaderBanner type={banner} object={object} isPopup={isPopup} {...bannerProps} />;
 		};
 
 		return (
 			<React.Fragment>
 				<div className="side left">
 					<Icon
-						className="toggle big"
+						className="toggle"
 						tooltip={translate('sidebarToggle')}
 						tooltipCaption={`${cmd} + \\, ${cmd} + .`}
 						tooltipY={I.MenuDirection.Bottom}
 						onClick={() => sidebar.toggleExpandCollapse()}
 					/>
-					<Icon className="expand big" tooltip={translate('commonOpenObject')} onClick={this.onOpen} />
+					<Icon className="expand" tooltip={translate('commonOpenObject')} onClick={this.onOpen} />
 					{canSync ? <Sync id="button-header-sync" rootId={rootId} onClick={this.onSync} /> : ''}
 				</div>
 
@@ -90,19 +91,24 @@ const HeaderMainObject = observer(class HeaderMainObject extends React.Component
 				</div>
 
 				<div className="side right">
-					{showMenu ? <Icon id="button-header-relation" tooltip="Relations" className="relation big" onClick={this.onRelation} /> : ''}
-					{showMenu ? <Icon id="button-header-more" tooltip="Menu" className="more big" onClick={this.onMore} /> : ''}
+					{showMenu ? <Icon id="button-header-relation" tooltip="Relations" tooltipCaption={`${cmd} + Shift + R`} className="relation" onClick={this.onRelation} /> : ''}
+					{showMenu ? <Icon id="button-header-more" tooltip="Menu" className="more" onClick={this.onMore} /> : ''}
 				</div>
 			</React.Fragment>
 		);
 	};
 
 	componentDidMount () {
-		keyboard.setWindowTitle();
+		this.init();
 	};
 
 	componentDidUpdate () {
+		this.init();
+	};
+
+	init () {
 		keyboard.setWindowTitle();
+		this.updateTemplatesCnt();
 	};
 
 	onOpen () {
@@ -110,7 +116,7 @@ const HeaderMainObject = observer(class HeaderMainObject extends React.Component
 		const object = detailStore.get(rootId, rootId, []);
 
 		keyboard.disableClose(true);
-		popupStore.closeAll(null, () => { UtilObject.openRoute(object); });
+		popupStore.closeAll(null, () => UtilObject.openRoute(object));
 	};
 	
 	onMore () {
@@ -160,6 +166,27 @@ const HeaderMainObject = observer(class HeaderMainObject extends React.Component
 				rootId,
 				readonly: object.isArchived
 			},
+		});
+	};
+
+	updateTemplatesCnt () {
+		const { rootId } = this.props;
+		const { templatesCnt } = this.state;
+		const object = detailStore.get(rootId, rootId, [ 'internalFlags' ]);
+		const allowedTemplateSelect = (object.internalFlags || []).includes(I.ObjectFlag.SelectTemplate);
+
+		if (!allowedTemplateSelect || !object.type) {
+			return;
+		};
+
+		UtilData.getTemplatesByTypeId(object.type, (message: any) => {
+			if (message.error.code) {
+				return;
+			};
+
+			if (message.records.length != templatesCnt) {
+				this.setState({ templatesCnt: message.records.length });
+			};
 		});
 	};
 

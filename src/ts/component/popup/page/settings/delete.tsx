@@ -1,14 +1,22 @@
 import * as React from 'react';
-import { Title, Button, Checkbox } from 'Component';
-import { I, C, translate, UtilCommon, analytics } from 'Lib';
-import { authStore } from 'Store';
+import { Title, Button, Checkbox, Error } from 'Component';
+import { I, C, translate, UtilRouter, analytics } from 'Lib';
+import { authStore, menuStore } from 'Store';
 import { observer } from 'mobx-react';
 import Head from './head';
 
-const PopupSettingsPageDelete = observer(class PopupSettingsPageDelete extends React.Component<I.PopupSettings> {
+interface State {
+	error: string;
+};
+
+const PopupSettingsPageDelete = observer(class PopupSettingsPageDelete extends React.Component<I.PopupSettings, State> {
 
 	refCheckbox: any = null;
+	refButton = null;
 	node: any = null;
+	state = {
+		error: '',
+	};
 
 	constructor (props: I.PopupSettings) {
 		super(props);
@@ -18,10 +26,10 @@ const PopupSettingsPageDelete = observer(class PopupSettingsPageDelete extends R
 	};
 
 	render () {
+		const { error } = this.state;
+
 		return (
-			<div
-				ref={node => this.node = node}
-			>
+			<div ref={node => this.node = node}>
 				<Head {...this.props} returnTo="dataManagement" name={translate('commonBack')} />
 				<Title text={translate('popupSettingsAccountDeleteTitle')} />
 
@@ -34,10 +42,11 @@ const PopupSettingsPageDelete = observer(class PopupSettingsPageDelete extends R
 				</div>
 
 				<div className="check" onClick={this.onCheck}>
-					<Checkbox ref={ref => this.refCheckbox = ref} /> {translate('popupSettingsDeleteCheckboxLabel')}
+					<Checkbox ref={ref => this.refCheckbox = ref} value={false} /> {translate('popupSettingsDeleteCheckboxLabel')}
 				</div>
 
-				<Button id="button" text={translate('commonDelete')} color="red c36" className="disabled" onClick={this.onDelete} />
+				<Button ref={ref => this.refButton = ref} text={translate('commonDelete')} color="red" className="c36" onClick={this.onDelete} />
+				<Error text={error} />
 			</div>
 		);
 	};
@@ -48,26 +57,27 @@ const PopupSettingsPageDelete = observer(class PopupSettingsPageDelete extends R
 			return;
 		};
 
-		C.AccountDelete(false, (message: any) => {
+		C.AccountDelete((message: any) => {
 			if (message.error.code) {
+				this.setState({ error: message.error.description });
 				return;
 			};
 
-			authStore.accountSet({ status: message.status });		
-			this.props.close();
-			UtilCommon.route('/auth/deleted', { replace: true });
+			authStore.accountSetStatus(message.status);
+			menuStore.closeAllForced();
 
+			this.props.close();
+
+			UtilRouter.go('/auth/deleted', { replace: true });
 			analytics.event('DeleteAccount');
 		});
 	};
 
 	onCheck () {
-		const node = $(this.node);
-		const button = node.find('#button');
 		const value = !this.refCheckbox.getValue();
 
 		this.refCheckbox.setValue(value);
-		value ? button.removeClass('disabled') : button.addClass('disabled');
+		this.refButton.setDisabled(!value);
 	};
 
 });

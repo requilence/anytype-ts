@@ -2,7 +2,7 @@ import * as React from 'react';
 import $ from 'jquery';
 import { MenuItemVertical } from 'Component';
 import { I, C, keyboard, analytics, translate, UtilObject, focus, Action } from 'Lib';
-import { detailStore, menuStore, blockStore } from 'Store';
+import { detailStore, menuStore, blockStore, popupStore } from 'Store';
 import Constant from 'json/constant.json';
 
 class MenuContext extends React.Component<I.Menu> {
@@ -37,8 +37,8 @@ class MenuContext extends React.Component<I.Menu> {
 								key={i}
 								{...action}
 								icon={action.icon || action.id}
-								onMouseEnter={(e: any) => { this.onMouseEnter(e, action); }}
-								onClick={(e: any) => { this.onClick(e, action); }}
+								onMouseEnter={e => this.onMouseEnter(e, action)}
+								onClick={e => this.onClick(e, action)}
 							/>
 						);
 					})}
@@ -71,7 +71,7 @@ class MenuContext extends React.Component<I.Menu> {
 
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 	
@@ -82,14 +82,15 @@ class MenuContext extends React.Component<I.Menu> {
 	getSections () {
 		const { param } = this.props;
 		const { data } = param;
-		const { subId, objectIds, getObject, isCollection } = data;
+		const { subId, objectIds, getObject, isCollection, allowedLink, allowedOpen } = data;
 		const length = objectIds.length;
 
 		let pageCopy = { id: 'copy', icon: 'copy', name: translate('commonDuplicate') };
 		let open = { id: 'open', icon: 'expand', name: translate('commonOpenObject') };
 		let linkTo = { id: 'linkTo', icon: 'linkTo', name: translate('commonLinkTo'), arrow: true };
 		let changeType = { id: 'changeType', icon: 'pencil', name: translate('blockFeaturedTypeMenuChangeType'), arrow: true };
-		let div = null;
+		let createWidget = { id: 'createWidget', icon: 'createWidget', name: translate('menuBlockMoreCreateWidget') };
+		let exportObject = { id: 'export', icon: 'export', name: translate('menuBlockMoreExport') };
 		let unlink = null;
 		let archive = null;
 		let archiveCnt = 0;
@@ -102,7 +103,6 @@ class MenuContext extends React.Component<I.Menu> {
 		let allowedType = true;
 
 		if (isCollection) {
-			div = { isDiv: true };
 			unlink = { id: 'unlink', icon: 'unlink', name: translate('menuDataviewContextUnlinkFromCollection') };
 		};
 
@@ -145,6 +145,7 @@ class MenuContext extends React.Component<I.Menu> {
 		if (length > 1) {
 			open = null;
 			linkTo = null;
+			createWidget = null;
 		};
 
 		if (archiveCnt == length) {
@@ -152,6 +153,7 @@ class MenuContext extends React.Component<I.Menu> {
 			linkTo = null;
 			unlink = null;
 			changeType = null;
+			exportObject = null;
 			archive = { id: 'unarchive', icon: 'restore', name: translate('commonRestoreFromBin') };
 		} else {
 			archive = { id: 'archive', icon: 'remove', name: translate('commonMoveToBin') };
@@ -161,9 +163,12 @@ class MenuContext extends React.Component<I.Menu> {
 		if (!allowedFav)		 fav = null;
 		if (!allowedCopy)		 pageCopy = null;
 		if (!allowedType)		 changeType = null;
+		if (!allowedLink)		 linkTo = null;
+		if (!allowedOpen)		 open = null;
 
 		let sections = [
-			{ children: [ open, fav, linkTo, changeType, div, pageCopy, unlink, archive ] },
+			{ children: [ createWidget, open, fav, linkTo, exportObject ] },
+			{ children: [ changeType, pageCopy, unlink, archive ] },
 		];
 
 		sections = sections.filter((section: any) => {
@@ -204,7 +209,6 @@ class MenuContext extends React.Component<I.Menu> {
 		};
 
 		const itemId = objectIds[0];
-		let menuId = '';
 		const menuParam = {
 			menuKey: item.id,
 			element: `#${getId()} #item-${item.id}`,
@@ -218,6 +222,7 @@ class MenuContext extends React.Component<I.Menu> {
 			}
 		};
 
+		let menuId = '';
 		switch (item.id) {
 			case 'changeType': {
 				menuId = 'typeSuggest';
@@ -227,7 +232,7 @@ class MenuContext extends React.Component<I.Menu> {
 						{ operator: I.FilterOperator.And, relationKey: 'recommendedLayout', condition: I.FilterCondition.In, value: UtilObject.getPageLayouts() },
 					],
 					onClick: (item: any) => {
-						C.ObjectListSetObjectType(objectIds, item.id);
+						C.ObjectListSetObjectType(objectIds, item.uniqueKey);
 						analytics.event('ChangeObjectType', { objectType: item.id, count: objectIds.length, route: 'MenuDataviewContext' });
 
 						close();
@@ -241,7 +246,6 @@ class MenuContext extends React.Component<I.Menu> {
 				menuParam.data = Object.assign(menuParam.data, {
 					filters: [
 						{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.In, value: UtilObject.getPageLayouts().concat([ I.ObjectLayout.Collection ]) },
-						{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemTypes() },
 						{ operator: I.FilterOperator.And, relationKey: 'isReadonly', condition: I.FilterCondition.NotEqual, value: true },
 					],
 					rootId: itemId,
@@ -333,18 +337,12 @@ class MenuContext extends React.Component<I.Menu> {
 			};
 
 			case 'fav': {
-				C.ObjectListSetIsFavorite(objectIds, true, () => {
-					cb();
-					analytics.event('AddToFavorites', { count, route });
-				});
+				Action.setIsFavorite(objectIds, true, route);
 				break;
 			};
 
 			case 'unfav': {
-				C.ObjectListSetIsFavorite(objectIds, false, () => {
-					cb();
-					analytics.event('RemoveFromFavorites', { count, route });
-				});
+				Action.setIsFavorite(objectIds, false, route);
 				break;
 			};
 
@@ -356,6 +354,17 @@ class MenuContext extends React.Component<I.Menu> {
 				break;
 			};
 
+			case 'createWidget': {
+				const firstBlock = blockStore.getFirstBlock(blockStore.widgets, 1, it => it.isWidget());
+
+				Action.createWidgetFromObject(first.id, first.id, firstBlock?.id, I.BlockPosition.Top);
+				break;
+			};
+
+			case 'export': {
+				popupStore.open('export', { data: { objectIds } });
+				break;
+			};
 		};
 		
 		close();

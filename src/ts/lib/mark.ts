@@ -2,19 +2,14 @@ import $ from 'jquery';
 import { I, UtilCommon, analytics } from 'Lib';
 import Constant from 'json/constant.json';
 
-const Tags = [ 
-	'strike', 
-	'kbd', 
-	'italic', 
-	'bold', 
-	'underline', 
-	'lnk', 
-	'color', 
-	'bgcolor', 
-	'mention', 
-	'emoji', 
-	'obj',
-];
+const Tags = {};
+for (const i in I.MarkType) {
+	if (isNaN(Number(i))) {
+		continue;
+	};
+
+	Tags[i] = `markup${I.MarkType[i].toLowerCase()}`;
+};
 
 const Patterns = {
 	'-→': '⟶',
@@ -382,13 +377,14 @@ class Mark {
 	};
 
 	cleanHtml (html: string) {
+		html = String(html || '');
 		html = html.replace(/&nbsp;/g, ' ');
 		html = html.replace(/<br\/?>/g, '\n');
 
 		// Remove inner tags from mentions and emoji
 		const obj = $(`<div>${html}</div>`);
 		
-		obj.find('mention').removeAttr('class').each((i: number, item: any) => {
+		obj.find(this.getTag(I.MarkType.Mention)).removeAttr('class').each((i: number, item: any) => {
 			item = $(item);
 			item.html(item.find('name').html());
 		});
@@ -400,18 +396,19 @@ class Mark {
 			const face = String(item.attr('face') || '').toLowerCase();
 
 			if (face == Constant.fontCode) {
-				item.replaceWith(`<kbd>${html}</kbd>`);
+				const tag = this.getTag(I.MarkType.Code);
+				item.replaceWith(`<${tag}>${html}</${tag}>`);
 			} else {
 				item.html(html);
 			};
 		});
 
-		obj.find('emoji').removeAttr('class').html(' ');
+		obj.find(this.getTag(I.MarkType.Emoji)).removeAttr('class').html(' ');
 		return obj;
 	};
 	
 	fromHtml (html: string, restricted: I.MarkType[]): { marks: I.Mark[], text: string, adjustMarks: boolean } {
-		const rh = new RegExp('<(\/)?(' + Tags.join('|') + ')(?:([^>]*)>|>)', 'ig');
+		const rh = new RegExp(`<(\/)?(${Object.values(Tags).join('|')})(?:([^>]*)>|>)`, 'ig');
 		const rp = new RegExp('data-param="([^"]*)"', 'i');
 		const obj = this.cleanHtml(html);
 		const marks: I.Mark[] = [];
@@ -435,8 +432,8 @@ class Mark {
 		// Fix browser markup bug
 		html.replace(/<\/?(i|b|font|search)>/g, (s: string, p: string) => {
 			let r = '';
-			if (p == 'i') r = 'italic';
-			if (p == 'b') r = 'bold';
+			if (p == 'i') r = this.getTag(I.MarkType.Italic);
+			if (p == 'b') r = this.getTag(I.MarkType.Bold);
 			p = r ? s.replace(p, r) : '';
 			text = text.replace(s, p);
 			return '';
@@ -459,7 +456,11 @@ class Mark {
 
 			const end = p1 == '/';
 			const offset = Number(text.indexOf(s)) || 0;
-			const type = Tags.indexOf(p2);
+			const type = Object.values(Tags).indexOf(p2);
+
+			if (type < 0) {
+				return;
+			};
 
 			if (end) {
 				for (let i = 0; i < marks.length; ++i) {
@@ -489,7 +490,7 @@ class Mark {
 	};
 
 	fromMarkdown (html: string, marks: I.Mark[], restricted: I.MarkType[], adjustMarks: boolean): { marks: I.Mark[], text: string, adjustMarks: boolean } {
-		const test = /[`\*_~\[]{1}/.test(html);
+		const test = /((^|\s)_|[`\*~\[]){1}/.test(html);
 		const checked = marks.filter(it => [ I.MarkType.Code ].includes(it.type));
 
 		if (!test) {
@@ -515,8 +516,8 @@ class Mark {
 				const from = (Number(text.indexOf(s)) || 0) + p1.length;
 				const to = from + p3.length;
 				const replace = (p1 + p3 + ' ').replace(new RegExp('\\$', 'g'), '$$$');
-				let check = true;
 
+				let check = true;
 				for (const mark of checked) {
 					if ((mark.range.from <= from) && (mark.range.to >= to)) {
 						check = false;
@@ -525,9 +526,10 @@ class Mark {
 				};
 
 				if (check) {
-					marks = this.adjust(marks, from, -p2.length * 2);
-
+					marks = this.adjust(marks, from, -p2.length);
+					marks = this.adjust(marks, to, -p4.length);
 					marks.push({ type: item.type, range: { from, to }, param: '' });
+
 					text = text.replace(s, replace);
 					adjustMarks = true;
 				};
@@ -637,7 +639,6 @@ class Mark {
 				attr = `class="bgColor bgColor-${param}"`;
 				break;
 		};
-		
 		return attr;
 	};
 
@@ -683,6 +684,10 @@ class Mark {
 		} else {
 			return Overlap.Right;
 		};
+	};
+
+	getTag (t: I.MarkType) {
+		return Tags[t];
 	};
 	
 };

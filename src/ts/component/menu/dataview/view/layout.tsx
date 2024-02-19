@@ -22,9 +22,7 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 	};
 
 	render () {
-		const { param } = this.props;
-		const { data } = param;
-		const { readonly } = data;
+		const isReadonly = this.isReadonly();
 		const { type } = this.param;
 		const sections = this.getSections();
 		const layouts = UtilMenu.getViews().map((it: any) => {
@@ -33,19 +31,30 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 			return it;
 		});
 
-		const Layout = (item: any) => (
-			<div 
-				className={[ 'layout', type == item.id ? 'active' : '' ].join(' ')}
-				onClick={(e: any) => { this.onClick(e, item); }}
-				onMouseEnter={this.menuClose}
-			>
-				<Icon className={item.icon} />
-				<Label text={item.name} />
-			</div>
-		);
+		const Layout = (item: any) => {
+			const cn = [ 'layout' ];
+
+			if (type == item.id) {
+				cn.push('active');
+			};
+			if (isReadonly) {
+				cn.push('isReadonly');
+			};
+
+			return (
+				<div 
+					className={cn.join(' ')}
+					onClick={e => this.onClick(e, item)}
+					onMouseEnter={this.menuClose}
+				>
+					<Icon className={item.icon} />
+					<Label text={item.name} />
+				</div>
+			);
+		};
 
 		const Section = (item: any) => (
-			<div id={'section-' + item.id} className="section">
+			<div id={`section-${item.id}`} className="section">
 				{item.name ? <div className="name">{item.name}</div> : ''}
 				<div className="items">
 					{item.children.map((action: any, i: number) => (
@@ -53,11 +62,11 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 							key={i} 
 							{...action} 
 							icon={action.icon}
-							readonly={readonly}
+							readonly={isReadonly}
 							checkbox={(type == action.id) && (item.id == 'type')}
-							onMouseEnter={(e: any) => { this.onMouseEnter(e, action); }}
-							onMouseLeave={(e: any) => { this.onMouseLeave(e, action); }}
-							onClick={(e: any) => { this.onClick(e, action); }} 
+							onMouseEnter={e => this.onMouseEnter(e, action)}
+							onMouseLeave={e => this.onMouseLeave(e, action)}
+							onClick={e => this.onClick(e, action)} 
 						/>
 					))}
 				</div>
@@ -119,43 +128,17 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 		const { data } = param;
 		const view = data.view.get();
 		const item = this.getItems()[this.n];
-		const k = keyboard.eventKey(e);
 
 		let ret = false;
 
-		keyboard.shortcut('enter', e, () => {
-			this.save();
-			close();
-			ret = true;
+		keyboard.shortcut('space', e, () => {
+			if ([ 'hideIcon', 'coverFit' ].includes(item.id)) {
+				e.preventDefault();
+
+				this.onSwitch(e, item.id, !view[item.id]);
+				ret = true;
+			};
 		});
-
-		if (ret) {
-			return;
-		};
-
-		if (this.isFocused) {
-			if (k != Key.down) {
-				return;
-			} else {
-				this.ref.blur();
-				this.n = -1;
-			};
-		} else {
-			if ((k == Key.up) && !this.n) {
-				this.n = -1;
-				this.ref.focus();
-				return;
-			};
-
-			keyboard.shortcut('space', e, () => {
-				if ([ 'hideIcon', 'coverFit' ].includes(item.id)) {
-					e.preventDefault();
-
-					this.onSwitch(e, item.id, !view[item.id]);
-					ret = true;
-				};
-			});
-		};
 
 		if (ret) {
 			return;
@@ -164,31 +147,48 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 		this.props.onKeyDown(e);
 	};
 
-	save () {
+	save (withName?: boolean) {
 		const { param } = this.props;
 		const { data } = param;
-		const { rootId, blockId, onSave, readonly } = data;
+		const { rootId, blockId, onSave } = data;
 		const block = blockStore.getLeaf(rootId, blockId);
+		const view = data.view.get();
 
-		if (readonly || !block) {
+		if (!block || !view || this.isReadonly()) {
 			return;
 		};
+	
+		const isBoard = this.param.type == I.ViewType.Board;
+		const isCalendar = this.param.type == I.ViewType.Calendar;
+		const clearGroups = isBoard && this.param.groupRelationKey && (view.groupRelationKey != this.param.groupRelationKey);
 
-		const current = data.view.get();
-		const clearGroups = (current.type == I.ViewType.Board) && this.param.groupRelationKey && (current.groupRelationKey != this.param.groupRelationKey);
-
-		if ((this.param.type == I.ViewType.Board) && !this.param.groupRelationKey) {
-			this.param.groupRelationKey = Relation.getGroupOption(rootId, blockId, this.param.groupRelationKey)?.id;
+		if (isCalendar && !this.param.groupRelationKey) {
+			this.param.groupRelationKey = 'lastModifiedDate';
 		};
 
-		C.BlockDataviewViewUpdate(rootId, blockId, current.id, this.param, () => {
-			if (clearGroups) {
-				Dataview.groupUpdate(rootId, blockId, current.id, []);
-				C.BlockDataviewGroupOrderUpdate(rootId, blockId, { viewId: current.id, groups: [] }, onSave);
-			} else {
-				if (onSave) {
-					onSave();
+		if (isBoard || isCalendar) {
+			const groupOptions = Relation.getGroupOptions(rootId, blockId, this.param.type);
+			if (!groupOptions.map(it => it.id).includes(this.param.groupRelationKey)) {
+				if (isCalendar) {
+					this.param.groupRelationKey = 'lastModifiedDate';
+				} else {
+					this.param.groupRelationKey = Relation.getGroupOption(rootId, blockId, this.param.type, this.param.groupRelationKey)?.id;
 				};
+			};
+		};
+
+		if (withName) {
+			this.param.name = this.getViewName();
+			view.name = this.param.name;
+		};
+
+		C.BlockDataviewViewUpdate(rootId, blockId, view.id, this.param, () => {
+			if (clearGroups) {
+				Dataview.groupUpdate(rootId, blockId, view.id, []);
+				C.BlockDataviewGroupOrderUpdate(rootId, blockId, { viewId: view.id, groups: [] }, onSave);
+			} else 
+			if (onSave) {
+				onSave();
 			};
 		});
 
@@ -200,10 +200,13 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 		const { data } = param;
 		const { rootId, blockId, readonly, isInline } = data;
 		const { type, coverRelationKey, cardSize, coverFit, groupRelationKey, groupBackgroundColors, hideIcon, pageLimit } = this.param;
+		const isGallery = type == I.ViewType.Gallery;
+		const isBoard = type == I.ViewType.Board;
+		const isCalendar = type == I.ViewType.Calendar;
 
 		let settings: any[] = [];
 
-		if (type == I.ViewType.Gallery) {
+		if (isGallery) {
 			const coverOption = Relation.getCoverOptions(rootId, blockId).find(it => it.id == coverRelationKey);
 			const sizeOption = Relation.getSizeOptions().find(it => it.id == cardSize);
 
@@ -217,16 +220,26 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 			]);
 		};
 
-		if (type == I.ViewType.Board) {
-			const groupOption = Relation.getGroupOption(rootId, blockId, groupRelationKey);
+		if (isBoard || isCalendar) {
+			const groupOption = Relation.getGroupOption(rootId, blockId, type, groupRelationKey);
+			const name = isBoard ? translate('menuDataviewViewEditGroupBy') : translate('menuDataviewViewEditDate');
 
-			settings = settings.concat([
-				{ id: 'groupRelationKey', name: translate('menuDataviewViewEditGroupBy'), caption: (groupOption ? groupOption.name : translate('commonSelect')), arrow: true },
-				{ 
-					id: 'groupBackgroundColors', name: translate('menuDataviewViewEditColorColumns'), withSwitch: true, switchValue: groupBackgroundColors,
-					onSwitch: (e: any, v: boolean) => { this.onSwitch(e, 'groupBackgroundColors', v); }
-				},
-			]);
+			settings.push({ 
+				id: 'groupRelationKey', 
+				name, 
+				caption: (groupOption ? groupOption.name : translate('commonSelect')), 
+				arrow: true,
+			});
+		};
+
+		if (isBoard) {
+			settings.push({ 
+				id: 'groupBackgroundColors', 
+				name: translate('menuDataviewViewEditColorColumns'), 
+				withSwitch: true, 
+				switchValue: groupBackgroundColors,
+				onSwitch: (e: any, v: boolean) => { this.onSwitch(e, 'groupBackgroundColors', v); }
+			});
 		};
 
 		settings.push({
@@ -234,19 +247,19 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 			onSwitch: (e: any, v: boolean) => { this.onSwitch(e, 'hideIcon', !v); }
 		});
 
-		if (isInline || (type == I.ViewType.Board)) {
+		if (isInline || isBoard) {
 			const options = Relation.getPageLimitOptions(type);
 			settings.push({ id: 'pageLimit', name: translate('menuDataviewViewEditPageLimit'), caption: (pageLimit || options[0].id), arrow: true });
 		};
 
-		let sections: any[] = [
+		let sections: any[] = [ 
 			{ id: 'settings', name: '', children: settings }
 		];
 
 		sections = sections.map((s: any) => {
 			s.children = s.children.filter(it => it);
 			return s;
-		});
+		}).filter(s => !!s.children.length);
 
 		return sections;
 	};
@@ -279,15 +292,15 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 		const { param, getId, getSize } = this.props;
 		const { data } = param;
 		const { rootId, blockId } = data;
-		const allowedView = blockStore.checkFlags(rootId, blockId, [ I.RestrictionDataview.View ]);
+		const isReadonly = this.isReadonly();
 		const { type, groupRelationKey } = this.param;
+		const view = data.view.get();
 
-		if (!item.arrow || !allowedView) {
+		if (!item.arrow || isReadonly) {
 			menuStore.closeAll(Constant.menuIds.viewEdit);
 			return;
 		};
 
-		let menuId = '';
 		const menuParam: I.MenuParam = { 
 			menuKey: item.id,
 			element: `#${getId()} #item-${item.id}`,
@@ -304,6 +317,8 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 			}
 		};
 
+		let menuId = '';
+
 		switch (item.id) {
 			case 'coverRelationKey': {
 				menuId = 'select';
@@ -316,8 +331,8 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 			case 'groupRelationKey': {
 				menuId = 'select';
 				menuParam.data = Object.assign(menuParam.data, {
-					value: Relation.getGroupOption(rootId, blockId, groupRelationKey)?.id,
-					options: Relation.getGroupOptions(rootId, blockId),
+					value: Relation.getGroupOption(rootId, blockId, view.type, groupRelationKey)?.id,
+					options: Relation.getGroupOptions(rootId, blockId, view.type),
 				});
 				break;
 			};
@@ -354,17 +369,25 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 	onClick (e: any, item: any) {
 		const { param } = this.props;
 		const { data } = param;
-		const { onSelect, readonly, isInline, getTarget } = data;
+		const { onSelect, isInline, getTarget } = data;
 		const object = getTarget();
 
-		if (readonly || item.arrow) {
+		if (this.isReadonly() || item.arrow) {
 			return;
 		};
 
 		if (item.sectionId == 'type') {
+			let withName = false;
+
+			if (this.param.name == Dataview.defaultViewName(this.param.type)) {
+				this.param.name = Dataview.defaultViewName(item.id);
+				withName = true;
+			};
+
 			this.param.type = item.id;
+
 			this.n = -1;
-			this.save();
+			this.save(withName);
 
 			analytics.event('ChangeViewType', {
 				type: item.id,
@@ -378,6 +401,10 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 		};
 	};
 
+	getViewName (name?: string) {
+		return (name || this.param.name || Dataview.defaultViewName(this.param.type)).trim();
+	};
+
 	menuClose () {
 		menuStore.closeAll(Constant.menuIds.viewEdit);
 	};
@@ -388,6 +415,15 @@ const MenuViewLayout = observer(class MenuViewLayout extends React.Component<I.M
 
 		obj.css({ height: 'auto' });
 		position();
+	};
+
+	isReadonly () {
+		const { param } = this.props;
+		const { data } = param;
+		const { rootId, blockId, readonly } = data;
+		const allowedView = blockStore.checkFlags(rootId, blockId, [ I.RestrictionDataview.View ]);
+
+		return readonly || !allowedView;
 	};
 	
 });

@@ -39,6 +39,7 @@ class Input extends React.Component<Props, State> {
 	_isMounted = false;
 	node: any = null;
 	mask: any = null;
+	isFocused: boolean = false;
 
 	public static defaultProps = {
         type: 'text',
@@ -105,17 +106,26 @@ class Input extends React.Component<Props, State> {
 	
 	componentDidMount () {
 		this._isMounted = true;
+
+		const { value, type, focusOnMount } = this.props;
 		
-		this.setValue(this.props.value);
-		this.setState({ type: this.props.type });
+		this.setValue(value);
+		this.setState({ type });
 		this.initMask();
-		if (this.props.focusOnMount) {
+
+		if (focusOnMount) {
 			this.focus();
-		}
+		};
 	};
 	
 	componentWillUnmount () {
 		this._isMounted = false;
+
+		if (this.isFocused) {
+			this.isFocused = false;
+			keyboard.setFocus(false);
+			keyboard.disableSelection(false);
+		};
 	};
 
 	initMask () {
@@ -125,9 +135,7 @@ class Input extends React.Component<Props, State> {
 		};
 
 		maskOptions = maskOptions || {};
-
-		const node = $(this.node);
-		new Inputmask(maskOptions.mask, maskOptions).mask(node.get(0));
+		new Inputmask(maskOptions.mask, maskOptions).mask($(this.node).get(0));
 	};
 
 	onChange (e: any) {
@@ -157,7 +165,11 @@ class Input extends React.Component<Props, State> {
 			this.props.onFocus(e, this.state.value);
 		};
 		
+		this.isFocused = true;
+		this.addClass('isFocused');
+
 		keyboard.setFocus(true);
+		keyboard.disableSelection(true);
 	};
 	
 	onBlur (e: any) {
@@ -165,7 +177,11 @@ class Input extends React.Component<Props, State> {
 			this.props.onBlur(e, this.state.value);
 		};
 		
+		this.isFocused = false;
+		this.removeClass('isFocused');
+
 		keyboard.setFocus(false);
+		keyboard.disableSelection(false);
 	};
 	
 	onPaste (e: any) {
@@ -201,7 +217,7 @@ class Input extends React.Component<Props, State> {
 	blur () {
 		window.setTimeout(() => {
 			if (this._isMounted) {
-				$(this.node).trigger('blurr');
+				$(this.node).trigger('blur');
 			};
 		});
 	};
@@ -217,7 +233,7 @@ class Input extends React.Component<Props, State> {
 			return;
 		};
 
-		this.state.value = String(v || '');
+		this.state.value = String(v ?? '');
 		this.setState({ value: this.state.value });
 	};
 	
@@ -254,19 +270,19 @@ class Input extends React.Component<Props, State> {
 	};
 	
 	addClass (v: string) {
-		if (!this._isMounted) {
-			return;
+		if (this._isMounted) {
+			$(this.node).addClass(v);
 		};
-
-		$(this.node).addClass(v);
 	};
 	
 	removeClass (v: string) {
-		if (!this._isMounted) {
-			return;
+		if (this._isMounted) {
+			$(this.node).removeClass(v);
 		};
+	};
 
-		$(this.node).removeClass(v);
+	setPlaceholder (v: string) {
+		$(this.node).attr({ placeholder: v });
 	};
 	
 };

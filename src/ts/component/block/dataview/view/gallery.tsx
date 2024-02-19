@@ -2,7 +2,7 @@ import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { AutoSizer, WindowScroller, List, CellMeasurer, CellMeasurerCache } from 'react-virtualized';
-import { I, Relation, UtilData, UtilCommon } from 'Lib';
+import { I, Relation, UtilData, UtilCommon, UtilObject } from 'Lib';
 import { dbStore, detailStore } from 'Store';
 import { LoadMore } from 'Component';
 import Card from './gallery/card';
@@ -81,9 +81,16 @@ const ViewGallery = observer(class ViewGallery extends React.Component<I.ViewCom
 
 		const row = (id: string) => {
 			if (id == 'add-record') {
-				return <CardAdd key={'gallery-card-' + view.id + id} />;
+				return <CardAdd key={`gallery-card-${view.id + id}`} />;
 			} else {
-				return <Card key={'gallery-card-' + view.id + id} {...this.props} recordId={id} getCoverObject={this.getCoverObject} />;
+				return (
+					<Card 
+						key={`gallery-card-${view.id + id}`}
+						{...this.props} 
+						record={detailStore.get(subId, id, getKeys(view.id))} 
+						getCoverObject={this.getCoverObject} 
+					/>
+				);
 			};
 		};
 
@@ -100,7 +107,7 @@ const ViewGallery = observer(class ViewGallery extends React.Component<I.ViewCom
 					rowIndex={param.index}
 				>
 					{({ measure }) => (
-						<div key={'gallery-card-' + view.id + param.index} className="row" style={style}>
+						<div key={`gallery-row-${view.id + param.index}`} className="row" style={style}>
 							{item.children.map(id => row(id))}
 						</div>
 					)}
@@ -157,11 +164,11 @@ const ViewGallery = observer(class ViewGallery extends React.Component<I.ViewCom
 		);
 	};
 
-	componentDidMount () {
+	componentDidMount (): void {
 		this.reset();
 	};
 
-	componentDidUpdate () {
+	componentDidUpdate (): void {
 		this.reset();
 	};
 
@@ -235,6 +242,10 @@ const ViewGallery = observer(class ViewGallery extends React.Component<I.ViewCom
 	};
 
 	getItems () {
+		if (!this.width) {
+			return [];
+		};
+
 		this.setColumnCount();
 
 		const records = this.getRecords();
@@ -301,7 +312,7 @@ const ViewGallery = observer(class ViewGallery extends React.Component<I.ViewCom
 	};
 
 	getCoverObject (id: string): any {
-		const { rootId, block, getView, getRecord } = this.props;
+		const { rootId, block, getView, getKeys } = this.props;
 		const view = getView();
 
 		if (!view.coverRelationKey) {
@@ -309,9 +320,9 @@ const ViewGallery = observer(class ViewGallery extends React.Component<I.ViewCom
 		};
 
 		const subId = dbStore.getSubId(rootId, block.id);
-		const record = getRecord(id);
+		const record = detailStore.get(subId, id, getKeys(view.id));
 		const value = Relation.getArrayValue(record[view.coverRelationKey]);
-		const allowedTypes = [ Constant.typeId.image, Constant.typeId.audio, Constant.typeId.video ];
+		const fileLayouts = UtilObject.getFileLayouts();
 
 		let object = null;
 		if (view.coverRelationKey == Constant.pageCoverRelationKey) {
@@ -319,7 +330,7 @@ const ViewGallery = observer(class ViewGallery extends React.Component<I.ViewCom
 		} else {
 			for (const id of value) {
 				const file = detailStore.get(subId, id, []);
-				if (file._empty_ || !allowedTypes.includes(file.type)) {
+				if (file._empty_ || !fileLayouts.includes(file.layout)) {
 					continue;
 				};
 
@@ -332,7 +343,7 @@ const ViewGallery = observer(class ViewGallery extends React.Component<I.ViewCom
 			return null;
 		};
 
-		if (!object.coverId && !object.coverType && !allowedTypes.includes(object.type)) {
+		if (!object.coverId && !object.coverType && !fileLayouts.includes(object.layout)) {
 			return null;
 		};
 

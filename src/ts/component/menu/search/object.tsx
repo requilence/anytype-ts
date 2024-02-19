@@ -30,7 +30,7 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 	items: any = [];
 	refFilter: any = null;
 	refList: any = null;
-	n = -1;
+	n = 0;
 	timeoutFilter = 0;
 	offset = 0;
 
@@ -64,7 +64,7 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 				return null;
 			};
 
-			const type = dbStore.getType(item.type);
+			const type = dbStore.getTypeById(item.type);
 			const checkbox = value && value.length && value.includes(item.id);
 			const cn = [];
 
@@ -140,11 +140,13 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 			<div className={cn.join(' ')}>
 				{!noFilter ? (
 					<Filter 
-						ref={ref => this.refFilter = ref} 
+						ref={ref => this.refFilter = ref}
+						className="outlined"
 						placeholder={placeholder} 
 						placeholderFocus={placeholderFocus} 
 						value={filter}
 						onChange={this.onFilterChange} 
+						focusOnMount={true}
 					/>
 				) : ''}
 
@@ -191,7 +193,6 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		this._isMounted = true;
 		this.rebind();
 		this.resize();
-		this.focus();
 		this.load(true);
 	};
 
@@ -202,6 +203,7 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		const items = this.getItems();
 
 		if (this.filter != filter) {
+			this.n = 0;
 			this.filter = filter;
 			this.reload();
 			return;
@@ -214,7 +216,6 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		});
 
 		this.resize();
-		this.focus();
 		this.props.setActive();
 	};
 	
@@ -225,7 +226,7 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 	
@@ -233,22 +234,13 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		$(window).off('keydown.menu');
 	};
 
-	focus () {
-		window.setTimeout(() => {
-			if (this.refFilter) {
-				this.refFilter.focus();
-			};
-		}, 15);
-	};
-
 	getItems () {
 		const { param } = this.props;
 		const { data } = param;
 		const { filter, label, canAdd, addParam } = data;
-
-		let items = [].concat(this.items);
-		const length = items.length;
-
+		const length = this.items.length;
+		const items = [].concat(this.items);
+		
 		if (label && length) {
 			items.unshift({ isSection: true, name: label });
 		};
@@ -277,7 +269,7 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 	};
 
 	reload () {
-		this.n = -1;
+		this.n = 0;
 		this.offset = 0;
 		this.load(true);
 	};
@@ -296,15 +288,17 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		const { data } = param;
 		const { type, dataMapper, dataSort, dataChange, skipIds, keys, ignoreWorkspace } = data;
 		const filter = String(data.filter || '');
+		const templateType = dbStore.getTemplateType();
 		
 		const filters: any[] = [
-			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: [ Constant.typeId.option ] },
+			{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.NotIn, value: [ I.ObjectLayout.Option ] },
 		].concat(data.filters || []);
 
 		const sorts = [].concat(data.sorts || []);
 
 		if (!sorts.length) {
 			sorts.push({ relationKey: 'lastOpenedDate', type: I.SortType.Desc });
+			sorts.push({ relationKey: 'type', type: I.SortType.Asc });
 		};
 
 		if (skipIds && skipIds.length) {
@@ -313,8 +307,9 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		if ([ I.NavigationType.Move, I.NavigationType.LinkTo ].includes(type)) {
 			filters.push({ operator: I.FilterOperator.And, relationKey: 'isReadonly', condition: I.FilterCondition.Equal, value: false });
 		};
-		if ([ I.NavigationType.Link ].includes(type)) {
-			filters.push({ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: [ Constant.typeId.relation ] });
+		if ([ I.NavigationType.Move, I.NavigationType.LinkTo, I.NavigationType.Link ].includes(type)) {
+			filters.push({ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemLayouts() });
+			filters.push({ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotEqual, value: templateType?.id });
 		};
 
 		if (clear) {
@@ -394,6 +389,7 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		const { filter, rootId, type, blockId, blockIds, position, onSelect, noClose } = data;
 		const addParam: any = data.addParam || {};
 		const object = detailStore.get(rootId, blockId);
+		const details = data.details || {};
 
 		if (!noClose) {
 			close();
@@ -431,12 +427,12 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 					break;
 
 				case I.NavigationType.LinkTo:
+					const isCollection = target.layout == I.ObjectLayout.Collection;
 					const cb = (message: any) => {
 						if (message.error.code) {
 							return;
 						};
 
-						const isCollection = target.type == Constant.typeId.collection;
 						const action = isCollection ? I.ToastAction.Collection : I.ToastAction.Link;
 						const linkType = isCollection ? 'Collection' : 'Object';
 
@@ -444,10 +440,10 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 						analytics.event('LinkToObject', { objectType: target.type, linkType });
 					};
 
-					if (target.type == Constant.typeId.collection) {
+					if (isCollection) {
 						C.ObjectCollectionAdd(target.id, [ rootId ], cb);
 					} else {
-						C.BlockCreate(target.id, '', position, this.getBlockParam(blockId, object.type), cb);
+						C.BlockCreate(target.id, '', position, this.getBlockParam(blockId, object.layout), cb);
 					};
 					break;
 			};
@@ -458,8 +454,8 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 				addParam.onClick();
 				close();
 			} else {
-				UtilObject.create('', '', { name: filter, type: commonStore.type }, I.BlockPosition.Bottom, '', {}, [ I.ObjectFlag.SelectType ], (message: any) => {
-					UtilObject.getById(message.targetId, (object: any) => { process(object, true); });
+				UtilObject.create('', '', { name: filter, type: commonStore.type, ...details }, I.BlockPosition.Bottom, '', {}, [ I.ObjectFlag.SelectType, I.ObjectFlag.SelectTemplate ], (message: any) => {
+					UtilObject.getById(message.targetId, object => process(object, true));
 					close();
 				});
 			};
@@ -468,11 +464,11 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		};
 	};
 
-	getBlockParam (id: string, type: string) {
+	getBlockParam (id: string, layout: I.ObjectLayout) {
 		const param: Partial<I.Block> = {};
 
-		switch (type) {
-			case Constant.typeId.bookmark: {
+		switch (layout) {
+			case I.ObjectLayout.Bookmark: {
 				param.type = I.BlockType.Bookmark;
 				param.content = {
 					state: I.BookmarkState.Done,
@@ -535,7 +531,7 @@ const MenuSearchObject = observer(class MenuSearchObject extends React.Component
 		const items = this.getItems().slice(0, LIMIT);
 		const obj = $(`#${getId()} .content`);
 
-		let height = 16 + (noFilter ? 0 : 44);
+		let height = 16 + (noFilter ? 0 : 42);
 		if (!items.length) {
 			height = isLoading ? height + 40 : 160;
 		} else {

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Frame, Title, Error, Pin, Header } from 'Component';
-import { I, UtilCommon, Storage, translate, keyboard, UtilObject } from 'Lib';
+import { I, UtilRouter, Storage, translate, keyboard, UtilObject } from 'Lib';
 import { authStore } from 'Store';
 import { observer } from 'mobx-react';
 
@@ -56,7 +56,7 @@ const PageAuthPinCheck = observer(class PageAuthPinCheck extends React.Component
 
 	rebind () {
 		this.unbind();
-		$(window).on('focus.pin', () => { this.ref.focus(); });
+		$(window).on('focus.pin', () => this.ref.focus());
 	};
 
 	onError () {
@@ -72,9 +72,9 @@ const PageAuthPinCheck = observer(class PageAuthPinCheck extends React.Component
 		keyboard.setPinChecked(true);
 
 		if (account) {
-			redirect ? UtilCommon.route(redirect, routeParam) : UtilObject.openHome('route', routeParam);
+			redirect ? UtilRouter.go(redirect, routeParam) : UtilObject.openHome('route', routeParam);
 		} else {
-			UtilCommon.route('/', routeParam);
+			UtilRouter.go('/', routeParam);
 		};
 	};
 	

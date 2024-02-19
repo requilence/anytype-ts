@@ -17,19 +17,19 @@
 			padding: 6px 2px 6px 0px; line-height: 20px; width: 30%; min-width: 40px; flex-shrink: 0; @include text-overflow-nw; 
 			display: flex; align-items: flex-start; gap: 0px 6px;
 		}
-		.info.noValue { width: 100%; color: $colorTextTertiary; }
+		.info.noValue { width: 100%; color: var(--color-text-tertiary); }
 
 		.info {
 			.name { 
 				display: inline-block; vertical-align: top; @include text-common; line-height: 20px; @include text-overflow-nw; 
-				color: $colorDarkGrey; width: 100%;
+				color: var(--color-text-secondary); width: 100%;
 			}
 			.icon.lock { width: 8px; height: 20px; background-image: url('~img/icon/lock.svg'); flex-shrink: 0; }
 			.icon.ghost { width: 20px; height: 20px; }
 		}
 
 		.wrap.isDeleted {
-			.info .name { color: $colorDarkGrey; }
+			.info .name { color: var(--color-text-secondary); }
 		}
 
 		.cellContent.canEdit {
@@ -37,12 +37,17 @@
 		}
 
 		.cell { @include text-common; width: 70%; position: relative; padding: 5px 8px; border-radius: 4px; transition: background $transitionCommon; }
-		.cell.canEdit:hover { background: $colorShapeHighlightLight; }
+		.cell.canEdit:hover { background: var(--color-shape-highlight-light); }
 		
-		.cell.c-select { padding: 4px 8px; }
+		.cell.c-select { padding: 8px; line-height: 18px; }
 		.cell.c-select {
-			.tagItem, .itemWrap { margin: 3px 6px 3px 0px; } 
 			.empty { line-height: 24px; }
+		}
+
+		.cell.c-select, 
+		.cell.c-object, 
+		.cell.c-file {
+			.over { flex-wrap: wrap; }
 		}
 
 		.cell.isEditing { padding: 0px; }
@@ -51,14 +56,14 @@
 			.cellContent.isName .input { height: 20px; line-height: 20px; width: calc(100% - 24px); }
 			.icon.clear { right: 8px; }
 
-			#entry { line-height: 18px; height: 18px; vertical-align: top; margin: 4px 0px 0px 0px; display: inline-block; }
+			#entry { line-height: 18px; height: 18px; vertical-align: top; display: inline-block; }
 		}
 
 		.cell.isEditing.c-select {
-			.cellContent { padding: 4px 8px; }
-			.placeholder { padding: 4px 8px; }
+			.cellContent, .placeholder  { padding: 6px 8px; }
+			#entry { margin-top: 2px; }
 		}
-		.cell.isEditing.c-select.isStatus {
+		.cell.isEditing.c-select.isSelect {
 			.over { width: calc(100% - 26px); }
 		}
 
@@ -76,20 +81,20 @@
 		}
 
 		.cell.c-object {
-			.element { margin-top: 1px; margin-bottom: 1px; background: none !important; }
+			.element { background: none !important; }
 		}
+
 		.cell.isEditing.c-object {
-			.cellContent { padding: 6px 8px 3px 8px !important; }
-			.placeholder { padding: 5px 8px 3px 8px; }
+			.cellContent, .placeholder { padding: 5px 8px 1px 8px !important; }
+		}
+
+		.cell.isEditing.c-file {
+			.cellContent, .placeholder { padding: 5px 8px !important; }
 		}
 
 		.cell.isEditing.c-longText {
-			.cellContent { box-shadow: 0px 0px; visibility: hidden; }
+			.cellContent { box-shadow: 0px 0px; visibility: hidden; border: 0px; padding: 5px 8px; }
 			.cellContent span:empty { height: 22px; }
-		}
-
-		.cell.isEditing.c-longText, .cell.isEditing.c-file { 
-			.cellContent { box-shadow: 0px 0px; border: 0px; padding: 5px 8px; }
 		}
 	}
 

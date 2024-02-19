@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
-import { I, C, UtilData, Relation, UtilObject, translate } from 'Lib';
+import { I, C, UtilData, UtilFile, Relation, UtilObject, translate, keyboard, UtilCommon } from 'Lib';
 import { IconObject, Pager, ObjectName, Cell } from 'Component';
-import { detailStore, dbStore } from 'Store';
+import { detailStore, dbStore, menuStore } from 'Store';
 import Constant from 'json/constant.json';
 
 interface Column {
@@ -15,8 +15,12 @@ interface Column {
 };
 
 interface Props {
+	subId: string;
 	rootId: string;
 	columns: Column[];
+	sources?: string[];
+	filters?: I.Filter[];
+	dataset?: any;
 };
 
 const PREFIX = 'listObject';
@@ -24,11 +28,20 @@ const LIMIT = 50;
 
 const ListObject = observer(class ListObject extends React.Component<Props> {
 
+	public static defaultProps: Props = {
+		subId: '',
+		rootId: '',
+		columns: [],
+		sources: [],
+		filters: [],
+	};
+
 	render () {
-		const { rootId, columns } = this.props;
-		const subId = this.getSubId();
+		const { subId, rootId, columns } = this.props;
 		const items = this.getItems();
 		const { offset, total } = dbStore.getMeta(subId, '');
+		const length = columns.length;
+		const width = 70 / length;
 
 		let pager = null;
 		if (total && items.length) {
@@ -37,13 +50,13 @@ const ListObject = observer(class ListObject extends React.Component<Props> {
 					offset={offset} 
 					limit={LIMIT} 
 					total={total} 
-					onChange={(page: number) => { this.getData(page); }} 
+					onChange={page => this.getData(page)} 
 				/>
 			);
 		};
 
 		const Row = (item: any) => {
-			const cn = [ 'row' ];
+			const cn = [ 'row', 'selectable', `type-${I.SelectType.Record}` ];
 
 			if ((item.layout == I.ObjectLayout.Task) && item.isDone) {
 				cn.push('isDone');
@@ -59,9 +72,14 @@ const ListObject = observer(class ListObject extends React.Component<Props> {
 			};
 
 			return (
-				<tr className={cn.join(' ')}>
-					<td className="cell">
-						<div className="cellContent isName" onClick={(e: any) => { UtilObject.openEvent(e, item); }}>
+				<tr 
+					id={`selectable-${item.id}`} 
+					className={cn.join(' ')} 
+					onContextMenu={e => this.onContext(e, item.id)}
+					{...UtilCommon.dataProps({ id: item.id, type: I.SelectType.Record })}
+				>
+					<td className="cell isName">
+						<div className="cellContent isName" onClick={() => UtilObject.openPopup(item)}>
 							<div className="flex">
 								<IconObject object={item} />
 								<ObjectName object={item} />
@@ -84,11 +102,17 @@ const ListObject = observer(class ListObject extends React.Component<Props> {
 							if (column.isObject) {
 								const object = detailStore.get(subId, value, []);
 								if (!object._empty_) {
-									onClick = (e: any) => UtilObject.openEvent(e, object);
+									let { name } = object;
+
+									if (UtilObject.isFileLayout(object.layout)) {
+										name = UtilFile.name(object);
+									};
+
+									onClick = () => UtilObject.openPopup(object);
 									content = (
 										<div className="flex">
 											<IconObject object={object} />
-											<ObjectName object={object} />
+											<ObjectName object={{ ...object, name }} />
 										</div>
 									);
 								};
@@ -101,8 +125,7 @@ const ListObject = observer(class ListObject extends React.Component<Props> {
 										subId={subId}
 										block={null}
 										relationKey={column.relationKey}
-										getRecord={() => item}
-										recordId={item.id}
+										record={item}
 										viewType={I.ViewType.Grid}
 										idPrefix={PREFIX}
 										iconSize={20}
@@ -117,12 +140,8 @@ const ListObject = observer(class ListObject extends React.Component<Props> {
 						};
 
 						return (
-							<td key={`cell-${column.relationKey}`} className="cell">
-								{content ? (
-									<div className={cnc.join(' ')} onClick={onClick}>
-										{content}
-									</div>
-								) : ''}
+							<td key={`cell-${column.relationKey}`} className="cell" style={{ width: `${width}%` }}>
+								{content ? <div className={cnc.join(' ')} onClick={onClick}>{content}</div> : ''}
 							</td>
 						);
 					})}
@@ -170,16 +189,12 @@ const ListObject = observer(class ListObject extends React.Component<Props> {
 	};
 
 	componentWillUnmount(): void {
-		C.ObjectSearchUnsubscribe([ this.getSubId() ]);
+		C.ObjectSearchUnsubscribe([ this.props.subId ]);
 	};
 
 	getItems () {
-		const subId = this.getSubId();
+		const { subId } = this.props;
 		return dbStore.getRecords(subId, '').map(id => detailStore.get(subId, id, this.getKeys()));
-	};
-
-	getSubId () {
-		return dbStore.getSubId(this.props.rootId, 'data');
 	};
 
 	getKeys () {
@@ -187,9 +202,8 @@ const ListObject = observer(class ListObject extends React.Component<Props> {
 	};
 
 	getData (page: number, callBack?: (message: any) => void) {
-		const { rootId } = this.props;
+		const { subId, sources, filters } = this.props;
 		const offset = (page - 1) * LIMIT;
-		const subId = this.getSubId();
 
 		dbStore.metaSet(subId, '', { offset });
 
@@ -199,12 +213,41 @@ const ListObject = observer(class ListObject extends React.Component<Props> {
 				{ relationKey: 'lastModifiedDate', type: I.SortType.Desc }
 			],
 			keys: this.getKeys(),
-			sources: [ rootId ],
+			sources,
+			filters,
 			offset,
 			limit: LIMIT,
 			ignoreHidden: true,
 			ignoreDeleted: true,
+			ignoreWorkspace: true,
 		}, callBack);
+	};
+
+	onContext (e: any, id: string): void {
+		e.preventDefault();
+		e.stopPropagation();
+
+		const { subId } = this.props;
+		const { dataset } = this.props;
+		const { selection } = dataset || {};
+
+		let objectIds = selection ? selection.get(I.SelectType.Record) : [];
+		if (!objectIds.length) {
+			objectIds = [ id ];
+		};
+		
+		menuStore.open('dataviewContext', {
+			recalcRect: () => { 
+				const { x, y } = keyboard.mouse.page;
+				return { width: 0, height: 0, x: x + 4, y: y };
+			},
+			data: {
+				objectIds,
+				subId,
+				allowedLink: true,
+				allowedOpen: true,
+			}
+		});
 	};
 
 });

@@ -1,10 +1,10 @@
-import { Rpc } from 'protobuf/pb/protos/commands_pb';
-import Model from 'protobuf/pkg/lib/pb/model/protos/models_pb';
+import { Rpc } from 'dist/lib/pb/protos/commands_pb';
+import Model from 'dist/lib/pkg/lib/pb/model/protos/models_pb';
 import { I, M, UtilCommon, Encode, Decode } from 'Lib';
 
 export const Mapper = {
 
-	BlockType: (v: number): I.BlockType => {
+	BlockType: (v: Model.Block.ContentCase): I.BlockType => {
 		const V = Model.Block.ContentCase;
 
 		let t = I.BlockType.Empty;
@@ -18,7 +18,7 @@ export const Mapper = {
 		if (v == V.DATAVIEW)			 t = I.BlockType.Dataview;
 		if (v == V.RELATION)			 t = I.BlockType.Relation;
 		if (v == V.FEATUREDRELATIONS)	 t = I.BlockType.Featured;
-		if (v == V.LATEX)				 t = I.BlockType.Latex;
+		if (v == V.LATEX)				 t = I.BlockType.Embed;
 		if (v == V.TABLE)				 t = I.BlockType.Table;
 		if (v == V.TABLECOLUMN)			 t = I.BlockType.TableColumn;
 		if (v == V.TABLEROW)			 t = I.BlockType.TableRow;
@@ -27,7 +27,7 @@ export const Mapper = {
 		return t;
 	},
 
-	BoardGroupType (v: number) {
+	BoardGroupType (v: Model.Block.Content.Dataview.Group.ValueCase) {
 		const V = Model.Block.Content.Dataview.Group.ValueCase;
 
 		let t = '';
@@ -38,9 +38,20 @@ export const Mapper = {
 		return t;
 	},
 
+	NotificationPayload (v: Model.Notification.PayloadCase) {
+		const V = Model.Notification.PayloadCase;
+
+		let t = '';
+		if (v == V.IMPORT)			 t = 'import';
+		if (v == V.EXPORT)			 t = 'export';
+		if (v == V.GALLERYIMPORT)	 t = 'galleryImport';
+		if (v == V.REQUESTTOJOIN)	 t = 'requestToJoin';
+		return t;
+	},
+
 	From: {
 
-		Account: (obj: any): I.Account => {
+		Account: (obj: Model.Account): I.Account => {
 			return {
 				id: obj.getId(),
 				info: obj.hasInfo() ? Mapper.From.AccountInfo(obj.getInfo()) : null,
@@ -49,7 +60,7 @@ export const Mapper = {
 			};
 		},
 
-		AccountInfo: (obj: any): I.AccountInfo => {
+		AccountInfo: (obj: Model.Account.Info): I.AccountInfo => {
 			return {
 				homeObjectId: obj.getHomeobjectid(),
 				profileObjectId: obj.getProfileobjectid(),
@@ -57,20 +68,20 @@ export const Mapper = {
 				deviceId: obj.getDeviceid(),
 				localStoragePath: obj.getLocalstoragepath(),
 				accountSpaceId: obj.getAccountspaceid(),
+				spaceViewId: obj.getSpaceviewid(),
 				widgetsId: obj.getWidgetsid(),
 				analyticsId: obj.getAnalyticsid(),
 				networkId: obj.getNetworkid(),
 			};
 		},
 
-		AccountConfig: (obj: any): I.AccountConfig => {
-			return {
-			};
+		AccountConfig: (obj: Model.Account.Config): I.AccountConfig => {
+			return {};
 		},
 
-		AccountStatus: (obj: any): I.AccountStatus => {
+		AccountStatus: (obj: Model.Account.Status): I.AccountStatus => {
 			return {
-				type: obj.getStatustype(),
+				type: obj.getStatustype() as number,
 				date: obj.getDeletiondate(),
 			};
 		},
@@ -78,32 +89,32 @@ export const Mapper = {
 		ObjectInfo: (obj: any): I.PageInfo => {
 			return {
 				id: obj.getId(),
-				details: Decode.decodeStruct(obj.getDetails()),
+				details: Decode.struct(obj.getDetails()),
 				snippet: obj.getSnippet(),
 				hasInboundLinks: obj.getHasinboundlinks(),
 			};
 		},
 
 		Record: (obj: any): any => {
-			return Decode.decodeStruct(obj);
+			return Decode.struct(obj);
 		},
 
-		Range: (obj: any): I.TextRange => {
+		Range: (obj: Model.Range): I.TextRange => {
 			return {
 				from: obj.getFrom(),
 				to: obj.getTo(),
 			};
 		},
 
-		Mark: (obj: any): I.Mark => {
+		Mark: (obj: Model.Block.Content.Text.Mark): I.Mark => {
 			return {
-				type: obj.getType(),
+				type: obj.getType() as number,
 				param: obj.getParam(),
 				range: Mapper.From.Range(obj.getRange()),
 			};
 		},
 
-		PreviewLink: (obj: any) => {
+		PreviewLink: (obj: Model.LinkPreview) => {
             return {
                 type: obj.getType(),
                 title: obj.getTitle(),
@@ -117,7 +128,7 @@ export const Mapper = {
 		Details: (obj: any): any => {
 			return {
 				id: obj.getId(),
-				details: Decode.decodeStruct(obj.getDetails()),
+				details: Decode.struct(obj.getDetails()),
 			};
 		},
 
@@ -129,19 +140,19 @@ export const Mapper = {
 			return {};
 		},
 
-		BlockLayout: (obj: any) => {
+		BlockLayout: (obj: Model.Block.Content.Layout) => {
 			return {
 				style: obj.getStyle(),
 			};
 		},
 
-		BlockDiv: (obj: any) => {
+		BlockDiv: (obj: Model.Block.Content.Div) => {
 			return {
 				style: obj.getStyle(),
 			};
 		},
 
-		BlockLink: (obj: any) => {
+		BlockLink: (obj: Model.Block.Content.Link) => {
 			return {
 				targetBlockId: obj.getTargetblockid(),
 				iconSize: obj.getIconsize(),
@@ -151,7 +162,7 @@ export const Mapper = {
 			};
 		},
 
-		BlockBookmark: (obj: any) => {
+		BlockBookmark: (obj: Model.Block.Content.Bookmark) => {
 			return {
 				targetObjectId: obj.getTargetobjectid(),
 				state: obj.getState(),
@@ -159,7 +170,7 @@ export const Mapper = {
 			};
 		},
 
-		BlockText: (obj: any) => {
+		BlockText: (obj: Model.Block.Content.Text) => {
 			let marks = [];
 			if (obj.hasMarks()) {
 				marks = (obj.getMarks().getMarksList() || []).map(Mapper.From.Mark);
@@ -176,20 +187,17 @@ export const Mapper = {
 			};
 		},
 
-		BlockFile: (obj: any) => {
+		BlockFile: (obj: Model.Block.Content.File) => {
 			return {
-				hash: obj.getHash(),
-				name: obj.getName(),
+				targetObjectId: obj.getTargetobjectid(),
 				type: obj.getType(),
 				style: obj.getStyle(),
-				mime: obj.getMime(),
-				size: obj.getSize(),
 				addedAt: obj.getAddedat(),
 				state: obj.getState(),
 			};
 		},
 
-		BlockDataview: (obj: any) => {
+		BlockDataview: (obj: Model.Block.Content.Dataview) => {
 			return {
 				sources: obj.getSourceList(),
 				views: (obj.getViewsList() || []).map(Mapper.From.View),
@@ -201,15 +209,16 @@ export const Mapper = {
 			};
 		},
 
-		BlockRelation: (obj: any) => {
+		BlockRelation: (obj: Model.Block.Content.Relation) => {
 			return {
 				key: obj.getKey(),
 			};
 		},
 
-		BlockLatex: (obj: any) => {
+		BlockLatex: (obj: Model.Block.Content.Latex) => {
 			return {
 				text: obj.getText(),
+				processor: obj.getProcessor(),
 			};
 		},
 
@@ -225,13 +234,13 @@ export const Mapper = {
 			return {};
 		},
 
-		BlockTableRow: (obj: any) => {
+		BlockTableRow: (obj: Model.Block.Content.TableRow) => {
 			return {
 				isHeader: obj.getIsheader(),
 			};
 		},
 
-		BlockWidget: (obj: any) => {
+		BlockWidget: (obj: Model.Block.Content.Widget) => {
 			return {
 				layout: obj.getLayout(),
 				limit: obj.getLimit(),
@@ -239,19 +248,19 @@ export const Mapper = {
 			};
 		},
 
-		Block: (obj: any): I.Block => {
+		Block: (obj: Model.Block): I.Block => {
 			const cc = obj.getContentCase();
 			const type = Mapper.BlockType(obj.getContentCase());
-			const fn = 'get' + UtilCommon.ucFirst(type);
-			const fm = UtilCommon.toUpperCamelCase('block-' + type);
+			const fn = `get${UtilCommon.ucFirst(type)}`;
+			const fm = UtilCommon.toUpperCamelCase(`block-${type}`);
 			const content = obj[fn] ? obj[fn]() : {};
 			const item: I.Block = {
 				id: obj.getId(),
 				type: type,
 				childrenIds: obj.getChildrenidsList() || [],
-				fields: Decode.decodeStruct(obj.getFields()),
-				hAlign: obj.getAlign(),
-				vAlign: obj.getVerticalalign(),
+				fields: Decode.struct(obj.getFields()) || {},
+				hAlign: obj.getAlign() as number,
+				vAlign: obj.getVerticalalign() as number,
 				bgColor: obj.getBackgroundcolor(),
 				content: {} as any,
 			};
@@ -278,14 +287,14 @@ export const Mapper = {
 			};
 		},
 
-		RelationLink: (obj: any): any => {
+		RelationLink: (obj: Model.RelationLink): any => {
 			return {
 				relationKey: obj.getKey(),
 				format: obj.getFormat(),
 			};
 		},
 
-		View: (obj: any): I.View => {
+		View: (obj: Model.Block.Content.Dataview.View): I.View => {
 			return Object.assign({
 				id: obj.getId(),
 				sorts: obj.getSortsList().map(Mapper.From.Sort),
@@ -310,7 +319,7 @@ export const Mapper = {
 			};
 		},
 
-		ViewRelation: (obj: any) => {
+		ViewRelation: (obj: Model.Block.Content.Dataview.Relation) => {
             return {
                 relationKey: obj.getKey(),
                 isVisible: obj.getIsvisible(),
@@ -321,32 +330,31 @@ export const Mapper = {
             };
         },
 
-		Filter: (obj: any): I.Filter => {
+		Filter: (obj: Model.Block.Content.Dataview.Filter): I.Filter => {
 			return {
 				id: obj.getId(),
 				relationKey: obj.getRelationkey(),
-				operator: obj.getOperator(),
-				condition: obj.getCondition(),
-				quickOption: obj.getQuickoption(),
-				value: obj.hasValue() ? Decode.decodeValue(obj.getValue()) : null,
+				operator: obj.getOperator() as number,
+				condition: obj.getCondition() as number,
+				quickOption: obj.getQuickoption() as number,
+				value: obj.hasValue() ? Decode.value(obj.getValue()) : null,
 			};
 		},
 
-		Sort: (obj: any): I.Sort => {
+		Sort: (obj: Model.Block.Content.Dataview.Sort): I.Sort => {
 			return {
 				id: obj.getId(),
 				relationKey: obj.getRelationkey(),
-				type: obj.getType(),
-				customOrder: (obj.getCustomorderList() || []).map(Decode.decodeValue),
+				type: obj.getType() as number,
+				customOrder: (obj.getCustomorderList() || []).map(Decode.value),
 			};
 		},
 
-		HistoryVersion: (obj: any): I.HistoryVersion => {
+		HistoryVersion: (obj: Rpc.History.Version): I.HistoryVersion => {
 			return {
 				id: obj.getId(),
 				previousIds: obj.getPreviousidsList() || [],
 				authorId: obj.getAuthorid(),
-				authorName: obj.getAuthorname(),
 				groupId: obj.getGroupid(),
 				time: obj.getTime(),
 			};
@@ -397,7 +405,7 @@ export const Mapper = {
             };
         },
 
-		GraphEdge: (obj: any) => {
+		GraphEdge: (obj: Rpc.Object.Graph.Edge) => {
             return {
 				type: obj.getType(),
 				source: obj.getSource(),
@@ -410,7 +418,7 @@ export const Mapper = {
             };
         },
 
-		UnsplashPicture: (obj: any) => {
+		UnsplashPicture: (obj: Rpc.Unsplash.Search.Response.Picture) => {
 			return {
                 id: obj.getId(),
 				url: obj.getUrl(),
@@ -419,7 +427,7 @@ export const Mapper = {
             };
 		},
 
-		ObjectView: (obj: any) => {
+		ObjectView: (obj: Model.ObjectView) => {
 			return {
 				rootId: obj.getRootid(),
 				blocks: (obj.getBlocksList() || []).map(Mapper.From.Block),
@@ -431,7 +439,7 @@ export const Mapper = {
 
 		BoardGroup: (obj: any): I.BoardGroup => {
 			const type = Mapper.BoardGroupType(obj.getValueCase());
-			const field = obj['get' + UtilCommon.ucFirst(type)]();
+			const field = obj[`get${UtilCommon.ucFirst(type)}`]();
 
 			let value: any = null;
 			switch (type) {
@@ -454,7 +462,7 @@ export const Mapper = {
 			};
 		},
 
-		GroupOrder: (obj: any) => {
+		GroupOrder: (obj: Model.Block.Content.Dataview.GroupOrder) => {
 			return {
 				viewId: obj.getViewid(),
 				groups: (obj.getViewgroupsList() || []).map((it: any) => {
@@ -468,11 +476,80 @@ export const Mapper = {
 			};
 		},
 
-		ObjectOrder: (obj: any) => {
+		ObjectOrder: (obj: Model.Block.Content.Dataview.ObjectOrder) => {
 			return {
 				viewId: obj.getViewid(),
 				groupId: obj.getGroupid(),
 				objectIds: obj.getObjectidsList() || [],
+			};
+		},
+
+		Notification: (obj: Model.Notification): I.Notification => {
+			const type = Mapper.NotificationPayload(obj.getPayloadCase());
+			const field = obj[`get${UtilCommon.ucFirst(type)}`]();
+			
+			let payload: any = {};
+
+			switch (type) {
+
+				case 'import':
+				case 'galleryImport': {
+					payload = Object.assign(payload, {
+						processId: field.getProcessid(),
+						errorCode: field.getErrorcode(),
+						spaceId: field.getSpaceid(),
+						name: field.getName(),
+					});
+
+					if (type == 'import') {
+						payload.importType = field.getImporttype();
+					};
+					break;
+				};
+
+				case 'export': {
+					payload = Object.assign(payload, {
+						errorCode: field.getErrorcode(),
+						exportType: field.getExporttype(),
+					});
+					break;
+				};
+
+				case 'requestToJoin': {
+					payload = Object.assign(payload, {
+						spaceId: field.getSpaceid(),
+						identity: field.getIdentity(),
+						identityName: field.getIdentityname(),
+						identityIcon: field.getIdentityicon(),
+					});
+					break;
+				};
+
+			};
+
+			return {
+				id: obj.getId(),
+				createTime: obj.getCreatetime(),
+				status: obj.getStatus() as number,
+				isLocal: obj.getIslocal(),
+				type: type as I.NotificationType,
+				payload,
+			};
+		},
+
+		Manifest: (obj: Model.ManifestInfo) => {
+			return {
+				id: obj.getId(),
+				schema: obj.getSchema(),
+				name: obj.getName(),
+				author: obj.getAuthor(),
+				license: obj.getLicense(),
+				title: obj.getTitle(),
+				description: obj.getDescription(),
+				downloadLink: obj.getDownloadlink(),
+				size: obj.getFilesize(),
+				screenshots: obj.getScreenshotsList() || [],
+				categories: obj.getCategoriesList() || [],
 			};
 		},
 
@@ -505,7 +582,7 @@ export const Mapper = {
 			const item = new Rpc.Object.SetDetails.Detail();
 
 			item.setKey(obj.key);
-			item.setValue(Encode.encodeValue(obj.value));
+			item.setValue(Encode.value(obj.value));
 
 			return item;
 		},
@@ -514,9 +591,13 @@ export const Mapper = {
 			const item = new Rpc.Block.ListSetFields.Request.BlockField();
 
 			item.setBlockid(obj.blockId);
-			item.setFields(Encode.encodeStruct(obj.fields || {}));
+			item.setFields(Encode.struct(obj.fields || {}));
 
 			return item;
+		},
+
+		BlockFeatured: () => {
+			return new Model.Block.Content.FeaturedRelations();
 		},
 
 		BlockLayout: (obj: any) => {
@@ -545,13 +626,11 @@ export const Mapper = {
 		BlockFile: (obj: any) => {
 			const content = new Model.Block.Content.File();
 	
-			content.setHash(obj.hash);
-			content.setName(obj.name);
+			content.setTargetobjectid(obj.targetObjectId);
 			content.setType(obj.type);
-			content.setMime(obj.mime);
-			content.setSize(obj.size);
 			content.setAddedat(obj.addedAt);
 			content.setState(obj.state);
+			content.setTargetobjectid(obj.targetObjectId);
 
 			return content;
 		},
@@ -598,6 +677,7 @@ export const Mapper = {
 			const content = new Model.Block.Content.Latex();
 	
 			content.setText(obj.text);
+			content.setProcessor(obj.processor);
 
 			return content;
 		},
@@ -663,7 +743,7 @@ export const Mapper = {
 			};
 	
 			if (obj.fields) {
-				block.setFields(Encode.encodeStruct(obj.fields || {}));
+				block.setFields(Encode.struct(obj.fields || {}));
 			};
 
 			const fb = UtilCommon.toCamelCase('set-' + obj.type.toLowerCase());
@@ -700,7 +780,7 @@ export const Mapper = {
 			item.setOperator(obj.operator);
 			item.setCondition(obj.condition);
 			item.setQuickoption(obj.quickOption);
-			item.setValue(Encode.encodeValue(obj.value));
+			item.setValue(Encode.value(obj.value));
 			item.setIncludetime(obj.includeTime);
 
 			return item;
@@ -712,7 +792,7 @@ export const Mapper = {
 			item.setId(obj.id);
 			item.setRelationkey(obj.relationKey);
 			item.setType(obj.type);
-			item.setCustomorderList((obj.customOrder || []).map(Encode.encodeValue));
+			item.setCustomorderList((obj.customOrder || []).map(Encode.value));
 			item.setFormat(obj.format);
 			item.setIncludetime(obj.includeTime);
 
@@ -793,6 +873,15 @@ export const Mapper = {
 
 			item.setId(obj.id);
 			item.setSnapshot(obj.snapshot);
+
+			return item;
+		},
+
+		ParticipantPermissionChange: (obj: any) => {
+			const item = new Model.ParticipantPermissionChange();
+
+			item.setIdentity(obj.identity);
+			item.setPerms(obj.permissions);
 
 			return item;
 		},

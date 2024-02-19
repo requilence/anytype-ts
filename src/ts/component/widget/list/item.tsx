@@ -2,7 +2,7 @@ import * as React from 'react';
 import raf from 'raf';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
-import { ObjectName, Icon, IconObject, ObjectDescription, DropTarget } from 'Component';
+import { ObjectName, Icon, IconObject, ObjectDescription, DropTarget, Label } from 'Component';
 import { blockStore, menuStore, detailStore } from 'Store';
 import { I, UtilCommon, UtilObject, keyboard, analytics, translate } from 'Lib';
 import { SortableHandle, SortableElement } from 'react-sortable-hoc';
@@ -17,6 +17,7 @@ type Props = {
 	isEditing?: boolean;
 	isCompact?: boolean;
 	isPreview?: boolean;
+	isSection?: boolean;
 };
 
 const WidgetListItem = observer(class WidgetListItem extends React.Component<Props> {
@@ -27,42 +28,66 @@ const WidgetListItem = observer(class WidgetListItem extends React.Component<Pro
 	constructor (props: Props) {
 		super(props);
 
+		this.onClick = this.onClick.bind(this);
+		this.onContext = this.onContext.bind(this);
 		this.onSelect = this.onSelect.bind(this);
 		this.onUpload = this.onUpload.bind(this);
 		this.onCheckbox = this.onCheckbox.bind(this);
 	};
 
 	render () {
-		const { subId, id, block, style, isCompact, isEditing, index, isPreview } = this.props;
+		const { subId, id, block, style, isCompact, isEditing, index, isPreview, isSection } = this.props;
 		const rootId = keyboard.getRootId();
 		const object = detailStore.get(subId, id, Constant.sidebarRelationKeys);
-		const { isReadonly, isArchived, restrictions, source, done } = object;
+		const { isReadonly, isArchived, restrictions, source } = object;
+		const allowedDetails = blockStore.isAllowed(restrictions, [ I.RestrictionObject.Details ]);
 		const iconKey = `widget-icon-${block.id}-${id}`;
 		const canDrop = !isEditing && blockStore.isAllowed(restrictions, [ I.RestrictionObject.Block ]);
 		const canDrag = isPreview && (block.content.targetBlockId == Constant.widgetId.favorite);
+		const hasMore = UtilObject.canParticipantWrite();
+
+		if (isSection) {
+			return (
+				<div
+					ref={node => this.node = node}
+					style={style}
+					className={[ 'item', 'isSection' ].join(' ')}
+				>
+					<div className="inner">
+						<Label text={translate(UtilCommon.toCamelCase([ 'common', id ].join('-')))} />
+					</div>
+				</div>
+			);
+		};
 
 		const Handle = SortableHandle(() => (
 			<Icon className="dnd" />
 		));
 
 		let descr = null;
+		let more = null;
+
 		if (!isCompact) {
-			if (object.type == Constant.typeId.bookmark) {
+			if (object.layout == I.ObjectLayout.Bookmark) {
 				descr = <div className="descr">{UtilCommon.shortUrl(source)}</div>;
 			} else {
 				descr = <ObjectDescription object={object} />;
 			};
 		};
+
+		if (hasMore) {
+			more = <Icon className="more" tooltip={translate('widgetOptions')} onMouseDown={e => this.onContext(e, true)} />;
+		};
 		
 		let inner = (
-			<div className="inner">
+			<div className="inner" onMouseDown={this.onClick}>
 				<IconObject 
 					id={iconKey}
 					key={iconKey}
 					object={object} 
 					size={isCompact ? 18 : 48} 
 					iconSize={isCompact ? 18 : 28}
-					canEdit={!isReadonly && !isArchived} 
+					canEdit={!isReadonly && !isArchived && allowedDetails} 
 					onSelect={this.onSelect} 
 					onUpload={this.onUpload} 
 					onCheckbox={this.onCheckbox} 
@@ -72,13 +97,13 @@ const WidgetListItem = observer(class WidgetListItem extends React.Component<Pro
 					}}
 				/>
 
-				<div className="info" onMouseDown={e => this.onClick(e)}>
+				<div className="info">
 					<ObjectName object={object} />
 					{descr}
 				</div>
 
 				<div className="buttons">
-					<Icon className="more" tooltip={translate('widgetOptions')} onMouseDown={e => this.onContext(e, true)} />
+					{more}
 				</div>
 			</div>
 		);
@@ -135,7 +160,7 @@ const WidgetListItem = observer(class WidgetListItem extends React.Component<Pro
 		this.resize();
 	};
 
-	onClick = (e: React.MouseEvent): void => {
+	onClick (e: React.MouseEvent) {
 		if (e.button) {
 			return;
 		};
@@ -150,7 +175,7 @@ const WidgetListItem = observer(class WidgetListItem extends React.Component<Pro
 		analytics.event('OpenSidebarObject');
 	};
 
-	onContext = (e: React.SyntheticEvent, withElement: boolean): void => {
+	onContext (e: React.SyntheticEvent, withElement: boolean) {
 		e.preventDefault();
 		e.stopPropagation();
 
@@ -161,8 +186,8 @@ const WidgetListItem = observer(class WidgetListItem extends React.Component<Pro
 		const menuParam: any = {
 			className: 'fixed',
 			classNameWrap: 'fromSidebar',
-			onOpen: () => { node.addClass('active'); },
-			onClose: () => { node.removeClass('active'); },
+			onOpen: () => node.addClass('active'),
+			onClose: () => node.removeClass('active'),
 			data: {
 				route: 'Widget',
 				objectIds: [ id ],
@@ -187,10 +212,8 @@ const WidgetListItem = observer(class WidgetListItem extends React.Component<Pro
 		UtilObject.setIcon(id, icon, '');
 	};
 
-	onUpload (hash: string) {
-		const { id } = this.props;
-
-		UtilObject.setIcon(id, '', hash);
+	onUpload (objectId: string) {
+		UtilObject.setIcon(this.props.id, '', objectId);
 	};
 
 	onCheckbox () {

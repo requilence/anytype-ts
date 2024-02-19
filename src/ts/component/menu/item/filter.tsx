@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { I, Relation, UtilCommon, translate } from 'Lib';
+import { I, Relation, UtilCommon, translate, UtilDate } from 'Lib';
 import { Icon, Tag, IconObject } from 'Component';
 import { detailStore } from 'Store';
 import { SortableHandle, SortableElement } from 'react-sortable-hoc';
@@ -23,7 +23,15 @@ const MenuItemFilter = observer(class MenuItemFilter extends React.Component<Pro
 
 	render () {
 		const { id, index, relation, condition, quickOption, subId, readonly, style, onOver, onClick, onRemove } = this.props;
-		const conditionOptions = Relation.filterConditionsByType(relation.format);
+		const isDictionary = Relation.isDictionary(relation.relationKey);
+
+		let conditionOptions = [];
+		if (isDictionary) {
+			conditionOptions = Relation.filterConditionsDictionary();
+		} else {
+			conditionOptions = Relation.filterConditionsByType(relation.format);
+		};
+
 		const conditionOption: any = conditionOptions.find(it => it.id == condition) || {};
 		const filterOptions = Relation.filterQuickOptions(relation.format, conditionOption.id);
 		const filterOption: any = filterOptions.find(it => it.id == quickOption) || {};
@@ -55,7 +63,7 @@ const MenuItemFilter = observer(class MenuItemFilter extends React.Component<Pro
 				let name = String(filterOption.name || '').toLowerCase();
 
 				if (quickOption == I.FilterQuickOption.ExactDate) {
-					v.push(value !== null ? UtilCommon.date('d.m.Y', value) : '');
+					v.push(value !== null ? UtilDate.date('d.m.Y', value) : '');
 				} else
 				if ([ I.FilterQuickOption.NumberOfDaysAgo, I.FilterQuickOption.NumberOfDaysNow ].includes(quickOption)) {
 					value = Number(value) || 0;
@@ -75,8 +83,8 @@ const MenuItemFilter = observer(class MenuItemFilter extends React.Component<Pro
 				break;
 			};
 
-			case I.RelationType.Tag:
-			case I.RelationType.Status: {
+			case I.RelationType.MultiSelect:
+			case I.RelationType.Select: {
 				list = Relation.getOptions(value);
 
 				if (list.length) {
@@ -121,6 +129,15 @@ const MenuItemFilter = observer(class MenuItemFilter extends React.Component<Pro
 					</React.Fragment>
 				);
 				break;
+			};
+		};
+
+		if (isDictionary) {
+			const options = Relation.getDictionaryOptions(relation.relationKey);
+			const option = options.find(it => it.id == v);
+
+			if (option) {
+				v = option.name;
 			};
 		};
 

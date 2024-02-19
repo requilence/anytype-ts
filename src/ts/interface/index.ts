@@ -1,4 +1,5 @@
 import { Account, AccountInfo, AccountConfig, AccountStatus, AccountStatusType } from './account';
+import { SpaceStatus, SpaceType, ParticipantPermissions, ParticipantStatus } from './space';
 import { AnimType, AnimDirection } from './animation';
 import { 
 	Platform, 
@@ -23,19 +24,23 @@ import {
 	SliceOperation,
 	Dataset,
 	ButtonComponent,
-	SpaceType,
 	FileSyncStatus,
+	BannerType,
 	StoreTab,
 	HomePredefinedId,
 	Usecase,
+	ObjectManagerItemInfo,
+	ObjectManagerPopup,
+	NetworkMode,
 } from './common';
 import { ThreadStatus, ThreadSummary, ThreadDevice, ThreadAccount, ThreadCafe, FilesStatus } from './thread';
 import { Progress, ProgressType, ProgressState } from './progress';
-import { PopupParam, Popup, PopupSettings } from './popup';
+import { PopupParam, Popup, PopupSettings, PopupUsecase } from './popup';
 import { Preview, PreviewLink, PreviewType, PreviewSize } from './preview';
 import { MenuTab, MenuType, MenuDirection, MenuParam, Menu, MenuItem } from './menu';
-import { ObjectLayout, ObjectFlag, RelationType, RelationScope, OptionScope } from './object';
+import { ObjectLayout, ObjectFlag, RelationType, RelationScope, ObjectOrigin } from './object';
 import { RestrictionObject, RestrictionDataview } from './restriction';
+import { NotificationType, NotificationStatus, NotificationAction, NotificationPayloadImport, Notification, NotificationComponent } from './notification';
 
 import { PageInfo, BlockType, BlockPosition, BlockSplitMode, BlockHAlign, BlockVAlign, BlockComponent, Block, BlockStructure } from './block';
 import {
@@ -66,7 +71,7 @@ import { FileType, FileState, FileStyle, ContentFile } from './block/file';
 import { BookmarkState, ContentBookmark } from './block/bookmark';
 import { DivStyle, ContentDiv } from './block/div';
 import { ContentRelation } from './block/relation';
-import { ContentLatex } from './block/latex';
+import { EmbedProcessor, ContentEmbed } from './block/embed';
 import { BlockComponentTable, ContentTableRow } from './block/table';
 import { WidgetLayout, WidgetTreeItem, WidgetTreeDetails, ContentWidget, WidgetComponent } from './block/widget';
 
@@ -76,6 +81,11 @@ export {
 	AccountConfig,
 	AccountStatus,
 	AccountStatusType,
+
+	SpaceStatus, 
+	SpaceType,
+	ParticipantPermissions, 
+	ParticipantStatus,
 
 	AnimType, 
 	AnimDirection,
@@ -100,6 +110,7 @@ export {
 	ButtonComponent,
 	HomePredefinedId,
 	Usecase,
+	NetworkMode,
 
 	ImportType,
 	ImportMode,
@@ -112,6 +123,9 @@ export {
 	ThreadAccount,
 	ThreadCafe,
 	FilesStatus,
+	BannerType,
+	ObjectManagerItemInfo,
+	ObjectManagerPopup,
 
 	Progress,
 	ProgressType,
@@ -120,13 +134,12 @@ export {
 	PopupParam,
 	Popup,
 	PopupSettings,
+	PopupUsecase,
 
 	Preview,
 	PreviewLink,
 	PreviewType,
 	PreviewSize,
-
-	SpaceType,
 
 	FileSyncStatus,
 
@@ -143,10 +156,17 @@ export {
 	ObjectFlag,
 	RelationType, 
 	RelationScope,
-	OptionScope,
+	ObjectOrigin,
 
 	RestrictionObject, 
 	RestrictionDataview,
+
+	NotificationType, 
+	NotificationStatus,
+	Notification,
+	NotificationPayloadImport,
+	NotificationComponent,
+	NotificationAction,
 	
 	PageInfo,
 
@@ -206,7 +226,8 @@ export {
 
 	ContentRelation, 
 
-	ContentLatex,
+	EmbedProcessor,
+	ContentEmbed,
 
 	BlockComponentTable,
 	ContentTableRow, 

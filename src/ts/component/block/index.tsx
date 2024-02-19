@@ -16,14 +16,17 @@ import BlockDiv from './div';
 import BlockRelation from './relation';
 import BlockFeatured from './featured';
 import BlockType from './type';
-import BlockLatex from './latex';
 import BlockTable from './table';
 import BlockTableOfContents from './tableOfContents';
+
 import BlockFile from './media/file';
 import BlockImage from './media/image';
 import BlockVideo from './media/video';
 import BlockAudio from './media/audio';
 import BlockPdf from './media/pdf'; 
+
+import BlockEmbed from './embed';
+
 import Constant from 'json/constant.json';
 
 interface Props extends I.BlockComponent {
@@ -66,26 +69,27 @@ const Block = observer(class Block extends React.Component<Props> {
 	};
 
 	render () {
-		const { rootId, css, className, block, readonly, isInsideTable, isSelectionDisabled, index } = this.props;
+		const { rootId, css, className, block, readonly, isInsideTable, isSelectionDisabled, onMouseEnter, onMouseLeave } = this.props;
 		const { id, type, fields, content, hAlign, bgColor } = block;
 
 		if (!id) {
 			return null;
 		};
 
+		const index = Number(this.props.index) || 0;
 		const { style, checked } = content;
 		const root = blockStore.getLeaf(rootId, rootId);
+		const cn: string[] = [ 'block', UtilData.blockClass(block), `align${hAlign}`, `index${index}` ];
+		const cd: string[] = [ 'wrapContent' ];
+		const setRef = ref => this.ref = ref;
+		const key = [ 'block', block.id, 'component' ].join(' ');
 
 		let canSelect = !isInsideTable && !isSelectionDisabled;
 		let canDrop = !readonly && !isInsideTable;
 		let canDropMiddle = false;
-		const cn: string[] = [ 'block', UtilData.blockClass(block), 'align' + hAlign, 'index' + index ];
-		const cd: string[] = [ 'wrapContent' ];
 		let blockComponent = null;
-		const empty = null;
-		const setRef = ref => this.ref = ref;
 		let additional = null;
-		let renderChildren = !isInsideTable;
+		let renderChildren = block.isLayout();
 
 		if (className) {
 			cn.push(className);
@@ -104,6 +108,7 @@ const Block = observer(class Block extends React.Component<Props> {
 		switch (type) {
 			case I.BlockType.Text: {
 				canDropMiddle = canDrop && block.canHaveChildren();
+				renderChildren = !isInsideTable && block.canHaveChildren();
 
 				if (block.isTextCheckbox() && checked) {
 					cn.push('isChecked');
@@ -117,7 +122,7 @@ const Block = observer(class Block extends React.Component<Props> {
 					canDrop = false;
 				};
 
-				blockComponent = <BlockText key={`block-${block.id}-component`} ref={setRef} {...this.props} onToggle={this.onToggle} />;
+				blockComponent = <BlockText key={key} ref={setRef} {...this.props} onToggle={this.onToggle} />;
 				break;
 			};
 
@@ -129,14 +134,14 @@ const Block = observer(class Block extends React.Component<Props> {
 			case I.BlockType.IconPage: {
 				canSelect = false;
 				canDrop = false;
-				blockComponent = <BlockIconPage key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+				blockComponent = <BlockIconPage key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 				
 			case I.BlockType.IconUser: {
 				canSelect = false;
 				canDrop = false;
-				blockComponent = <BlockIconUser key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+				blockComponent = <BlockIconUser key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 				
@@ -146,33 +151,33 @@ const Block = observer(class Block extends React.Component<Props> {
 				};
 
 				if (style == I.FileStyle.Link) {
-					blockComponent = <BlockFile key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+					blockComponent = <BlockFile key={key} ref={setRef} {...this.props} />;
 					break;
 				};
 
 				switch (content.type) {
 					default: {
-						blockComponent = <BlockFile key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+						blockComponent = <BlockFile key={key} ref={setRef} {...this.props} />;
 						break;
 					};
 						
 					case I.FileType.Image: {
-						blockComponent = <BlockImage key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+						blockComponent = <BlockImage key={key} ref={setRef} {...this.props} />;
 						break;
 					};
 						
 					case I.FileType.Video: {
-						blockComponent = <BlockVideo key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+						blockComponent = <BlockVideo key={key} ref={setRef} {...this.props} />;
 						break;
 					};
 
 					case I.FileType.Audio: {
-						blockComponent = <BlockAudio key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+						blockComponent = <BlockAudio key={key} ref={setRef} {...this.props} />;
 						break;
 					};
 
 					case I.FileType.Pdf: {
-						blockComponent = <BlockPdf key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+						blockComponent = <BlockPdf key={key} ref={setRef} {...this.props} />;
 						break;
 					};
 				};
@@ -181,16 +186,16 @@ const Block = observer(class Block extends React.Component<Props> {
 			};
 				
 			case I.BlockType.Dataview: {
-				canDrop = canSelect = !(root.isObjectSet() || root.isObjectSpace() || root.isObjectCollection());
+				canDrop = canSelect = !(root.isObjectSet() || root.isObjectCollection() || root.isObjectDate());
 				if (canSelect) {
 					cn.push('isInline');
 				};
-				blockComponent = <BlockDataview key={`block-${block.id}-component`} ref={setRef} isInline={canSelect} {...this.props} />;
+				blockComponent = <BlockDataview key={key} ref={setRef} isInline={canSelect} {...this.props} />;
 				break;
 			};
 				
 			case I.BlockType.Div: {
-				blockComponent = <BlockDiv key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+				blockComponent = <BlockDiv key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 				
@@ -203,7 +208,7 @@ const Block = observer(class Block extends React.Component<Props> {
 
 				cn.push(UtilData.linkCardClass(content.cardStyle));
 
-				blockComponent = <BlockLink key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+				blockComponent = <BlockLink key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 
@@ -218,48 +223,50 @@ const Block = observer(class Block extends React.Component<Props> {
 					cn.push('withContent');
 				};
 
-				blockComponent = <BlockBookmark key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+				blockComponent = <BlockBookmark key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 				
 			case I.BlockType.Cover: {
 				canSelect = false;
 				canDrop = false;
-				blockComponent = <BlockCover key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+
+				blockComponent = <BlockCover key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 
 			case I.BlockType.Relation: {
-				blockComponent = <BlockRelation key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+				blockComponent = <BlockRelation key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 
 			case I.BlockType.Featured: {
 				canDrop = false;
-				blockComponent = <BlockFeatured key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+
+				blockComponent = <BlockFeatured key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 
 			case I.BlockType.Type: {
 				canSelect = false;
 				canDrop = false;
-				blockComponent = <BlockType key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+
+				blockComponent = <BlockType key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 
-			case I.BlockType.Latex: {
-				blockComponent = <BlockLatex key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+			case I.BlockType.Embed: {
+				blockComponent = <BlockEmbed key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 
 			case I.BlockType.Table: {
-				renderChildren = false;
-				blockComponent = <BlockTable key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+				blockComponent = <BlockTable key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 
 			case I.BlockType.TableOfContents: {
-				blockComponent = <BlockTableOfContents key={`block-${block.id}-component`} ref={setRef} {...this.props} />;
+				blockComponent = <BlockTableOfContents key={key} ref={setRef} {...this.props} />;
 				break;
 			};
 		};
@@ -300,31 +307,26 @@ const Block = observer(class Block extends React.Component<Props> {
 		};
 
 		if (block.isLayoutColumn() && canDrop) {
-			const childrenIds = blockStore.getChildrenIds(rootId, block.id);
-			const lastId = childrenIds.length ? childrenIds[childrenIds.length - 1] : '';
-
-			if (lastId) {
-				targetColumn = (
-					<DropTarget 
-						{...this.props} 
-						isTargetColumn={true} 
-						rootId={rootId} 
-						id={lastId} 
-						style={style} 
-						type={type} 
-						dropType={I.DropType.Block} 
-						canDropMiddle={canDropMiddle} 
-						onClick={this.onEmptyColumn} 
-					/>
-				);
-			};
+			targetColumn = (
+				<DropTarget 
+					{...this.props} 
+					isTargetColumn={true} 
+					rootId={rootId} 
+					id={block.id} 
+					style={style} 
+					type={type} 
+					dropType={I.DropType.Block} 
+					canDropMiddle={canDropMiddle} 
+					onClick={this.onEmptyColumn} 
+				/>
+			);
 		};
 		
 		if (canSelect) {
 			object = (
 				<div 
 					id={`selectable-${id}`} 
-					className={[ 'selectable', 'type-' + I.SelectType.Block ].join(' ')} 
+					className={[ 'selectable', `type-${I.SelectType.Block}` ].join(' ')} 
 					{...UtilCommon.dataProps({ id, type: I.SelectType.Block })}
 				>
 					{object}
@@ -344,14 +346,16 @@ const Block = observer(class Block extends React.Component<Props> {
 		return (
 			<div 
 				ref={node => this.node = node}
-				id={'block-' + id} 
+				id={`block-${id}`} 
 				className={cn.join(' ')} 
 				style={css}
+				onMouseEnter={onMouseEnter} 
+				onMouseLeave={onMouseLeave}
 				{...UtilCommon.dataProps({ id })}
 			>
 				<div className="wrapMenu">
 					<Icon 
-						id={'button-block-menu-' + id} 
+						id={`button-block-menu-${id}`} 
 						className="dnd" 
 						draggable={true} 
 						onDragStart={this.onDragStart} 
@@ -363,12 +367,11 @@ const Block = observer(class Block extends React.Component<Props> {
 				<div className={cd.join(' ')}>
 					{targetTop}
 					{object}
-					{empty}
 					{additional ? <div className="additional">{additional}</div> : ''}
 
 					{renderChildren ? (
 						<ListChildren 
-							key={'block-children-' + id} 
+							key={`block-children-${id}`} 
 							{...this.props} 
 							onMouseMove={this.onMouseMove} 
 							onMouseLeave={this.onMouseLeave} 
@@ -481,10 +484,10 @@ const Block = observer(class Block extends React.Component<Props> {
 
 	onContextMenu (e: any) {
 		const { focused } = focus.state;
-		const { rootId, block, readonly } = this.props;
+		const { rootId, block, readonly, isContextMenuDisabled } = this.props;
 		const root = blockStore.getLeaf(rootId, rootId);
 
-		if (readonly || !block.isSelectable() || (block.isText() && (focused == block.id)) || block.isTable()) {
+		if (isContextMenuDisabled || readonly || !block.isSelectable() || (block.isText() && (focused == block.id)) || block.isTable() || block.isDataview()) {
 			return;
 		};
 
@@ -506,7 +509,7 @@ const Block = observer(class Block extends React.Component<Props> {
 
 	menuOpen (param?: Partial<I.MenuParam>) {
 		const { dataset, rootId, block, blockRemove, onCopy } = this.props;
-		const { selection } = dataset || {};
+		const { selection } = dataset;
 
 		// Hide block menus and plus button
 		$('#button-block-add').removeClass('show');
@@ -516,7 +519,9 @@ const Block = observer(class Block extends React.Component<Props> {
 		const menuParam: Partial<I.MenuParam> = Object.assign({
 			subIds: Constant.menuIds.action,
 			onClose: () => {
-				selection.clear();
+				if (selection) {
+					selection.clear();
+				};
 				focus.apply();
 			},
 			data: {
@@ -565,8 +570,8 @@ const Block = observer(class Block extends React.Component<Props> {
 		node.find('.colResize.active').removeClass('active');
 		node.find('.colResize.c' + index).addClass('active');
 		
-		win.on('mousemove.block', (e: any) => { this.onResize(e, index, offset); });
-		win.on('mouseup.block', (e: any) => { this.onResizeEnd(e, index, offset); });
+		win.on('mousemove.block', e => this.onResize(e, index, offset));
+		win.on('mouseup.block', e => this.onResizeEnd(e, index, offset));
 		
 		node.find('.resizable').trigger('resizeStart', [ e ]);
 	};

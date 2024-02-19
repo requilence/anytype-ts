@@ -2,9 +2,8 @@ import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { Loader, IconObject, Icon, Label } from 'Component';
-import { I, C, UtilCommon, analytics, Action, keyboard, translate } from 'Lib';
-import { popupStore, detailStore, blockStore } from 'Store';
-import Constant from 'json/constant.json';
+import { I, UtilCommon, UtilObject, analytics, Action, keyboard, translate, Preview } from 'Lib';
+import { popupStore } from 'Store';
 
 import PageAccount from './page/settings/account';
 import PageDataManagement from './page/settings/data';
@@ -29,11 +28,11 @@ import PageExportProtobuf from './page/settings/export/protobuf';
 import PageExportMarkdown from './page/settings/export/markdown';
 
 import PageSpaceIndex from './page/settings/space/index';
+import PageSpaceCreate from './page/settings/space/create';
 import PageSpaceStorageManager from './page/settings/space/storage';
-import PageSpaceInvite from './page/settings/space/invite';
-import PageSpaceTeam from './page/settings/space/team';
-import PageSpaceLeave from './page/settings/space/leave';
-import PageSpaceRemove from './page/settings/space/remove';
+import PageSpaceShare from './page/settings/space/share';
+import PageSpaceMembers from './page/settings/space/members';
+import PageSpaceList from './page/settings/space/list';
 
 interface State {
 	loading: boolean;
@@ -64,11 +63,11 @@ const Components: any = {
 	exportMarkdown:		 PageExportMarkdown,
 
 	spaceIndex:			 PageSpaceIndex,
+	spaceCreate:		 PageSpaceCreate,
 	spaceStorageManager: PageSpaceStorageManager,
-	spaceInvite:		 PageSpaceInvite,
-	spaceTeam:		 	 PageSpaceTeam,
-	spaceLeave:		 	 PageSpaceLeave,
-	spaceRemove:		 PageSpaceRemove,
+	spaceShare:			 PageSpaceShare,
+	spaceMembers:		 PageSpaceMembers,
+	spaceList:			 PageSpaceList,
 };
 
 const PopupSettings = observer(class PopupSettings extends React.Component<I.Popup, State> {
@@ -90,6 +89,7 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 		this.setConfirmPin = this.setConfirmPin.bind(this);
 		this.setPinConfirmed = this.setPinConfirmed.bind(this);
 		this.setLoading = this.setLoading.bind(this);
+		this.onSpaceTypeTooltip = this.onSpaceTypeTooltip.bind(this);
 	};
 
 	render () {
@@ -98,7 +98,7 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 		const { page } = data;
 		const { loading } = this.state;
 		const sections = this.getSections().filter(it => !it.isHidden);
-		const profile = detailStore.get(Constant.subId.profile, blockStore.profile);
+		const participant = UtilObject.getParticipant();
 		const cnr = [ 'side', 'right', UtilCommon.toCamelCase('tab-' + page) ];
 		const length = sections.length;
 
@@ -121,6 +121,7 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 					setConfirmPin={this.setConfirmPin}
 					setPinConfirmed={this.setPinConfirmed}
 					setLoading={this.setLoading}
+					onSpaceTypeTooltip={this.onSpaceTypeTooltip}
 				/>
 			);
 
@@ -134,18 +135,14 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 
 			let icon = null;
 			let name = null;
-			const onlineStatus = null;
 
 			if (action.id == 'account') {
-				const isOnline = true;
-				const status = isOnline ? 'online' : 'offline';
+				icon = <IconObject object={participant} size={36} iconSize={36} forceLetter={true} />;
+				name = participant.name;
 
-				icon = <IconObject object={profile} size={40} iconSize={40} forceLetter={true} />;
-				name = profile.name;
 				cn.push('itemAccount');
-				// onlineStatus = <div className={[ 'onlineStatus', status ].join(' ')}>{status}</div>
 			} else {
-				icon = <Icon className={action.icon || action.id} />;
+				icon = <Icon className={`settings-${action.icon || action.id}`} />;
 				name = action.name;
 			};
 
@@ -156,10 +153,7 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 					onClick={() => this.onPage(action.id)}
 				>
 					{icon}
-					<div className="name">
-						{name}
-						{onlineStatus}
-					</div>
+					<div className="name">{name}</div>
 				</div>
 			);
 		};
@@ -179,7 +173,7 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 		return (
 			<div 
 				ref={node => this.node = node}
-				className="sides"
+				className="mainSides"
 			>
 				{sections.length ? (
 					<div id="sideLeft" className="side left">
@@ -233,9 +227,9 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 		const win = $(window);
 
 		this.unbind();
-		win.on('resize.settings', () => { this.resize(); });
+		win.on('resize.settings', () => this.resize());
 		win.on('keydown.settings', e => this.onKeyDown(e));
-		win.on('mousedown.settings', (e: any) => { this.onMouseDown(e); });
+		win.on('mousedown.settings', e => this.onMouseDown(e));
 	};
 
 	unbind () {
@@ -255,10 +249,12 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 							id: 'spaceIndex',
 							name: translate('popupSettingsSpaceTitle'),
 							subPages: [
-								'spaceInvite', 'spaceTeam', 'spaceLeave', 'spaceRemove', 'spaceStorageManager',
+								'spaceCreate', 'spaceStorageManager',
 								'importIndex', 'importNotion', 'importNotionHelp', 'importNotionWarning', 'importCsv',
-								'exportIndex', 'exportProtobuf', 'exportMarkdown'
-							]
+								'exportIndex', 'exportProtobuf', 'exportMarkdown',
+								'spaceShare', 'spaceMembers'
+							],
+							noHeader: [ 'spaceCreate' ],
 						},
 					]
 				},
@@ -275,6 +271,7 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 				},
 				{ 
 					name: translate('popupSettingsVoidTitle'), children: [
+						{ id: 'spaceList', name: translate('popupSettingsSpacesListTitle'), icon: 'spaces' },
 						{ id: 'dataManagement', name: translate('popupSettingsDataManagementTitle'), icon: 'storage', subPages: [ 'delete' ] },
 						{ id: 'phrase', name: translate('popupSettingsPhraseTitle') },
 					]
@@ -368,12 +365,23 @@ const PopupSettings = observer(class PopupSettings extends React.Component<I.Pop
 		const items = this.getItems();
 
 		for (const item of items) {
-			if ((item.subPages || []).includes(page)) {
+			if ((item.subPages || []).includes(page) && !(item.noHeader || []).includes(page)) {
 				return true;
 			};
 		};
 
 		return false;
+	};
+
+	onSpaceTypeTooltip (e) {
+		Preview.tooltipShow({
+			title: translate('popupSettingsSpaceIndexSpaceTypePersonalTooltipTitle'),
+			text: translate('popupSettingsSpaceIndexSpaceTypePersonalTooltipText'),
+			className: 'big',
+			element: $(e.currentTarget),
+			typeY: I.MenuDirection.Bottom,
+			typeX: I.MenuDirection.Left
+		});
 	};
 
 	resize () {

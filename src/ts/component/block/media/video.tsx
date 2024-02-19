@@ -32,16 +32,15 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 	render () {
 		const { block, readonly } = this.props;
 		const { id, fields, content } = block;
-		const { state, hash, type, mime } = content;
-		
+		const { state, targetObjectId } = content;
 		const { width } = fields;
-		let element = null;
 		const css: any = {};
-		
+
 		if (width) {
 			css.width = (width * 100) + '%';
-			css.height = this.getHeight(width);
 		};
+
+		let element = null;
 		
 		switch (state) {
 			default:
@@ -54,7 +53,7 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 							block={block} 
 							icon="video" 
 							textFile={translate('blockVideoUpload')} 
-							accept={Constant.extension.video} 
+							accept={Constant.fileExtension.video} 
 							onChangeUrl={this.onChangeUrl} 
 							onChangeFile={this.onChangeFile} 
 							readonly={readonly} 
@@ -71,11 +70,11 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 				element = (
 					<div className="wrap resizable blockVideo" style={css}>
 						<MediaVideo
-							src={commonStore.fileUrl(hash)}
+							src={commonStore.fileUrl(targetObjectId)}
 							onPlay={this.onPlay}
 							onPause={this.onPause}
 						/>
-						<Icon className="resize" onMouseDown={(e: any) => { this.onResizeStart(e, false); }} />
+						<Icon className="resize" onMouseDown={e => this.onResizeStart(e, false)} />
 					</div>
 				);
 				break;
@@ -98,6 +97,7 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 	componentDidMount () {
 		this._isMounted = true;
 		this.rebind();
+		this.initVideo();
 	};
 	
 	componentDidUpdate () {
@@ -108,32 +108,38 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 		this._isMounted = false;
 		this.unbind();
 	};
+
+	initVideo () {
+		const node = $(this.node);
+		const video = node.find('video');
+
+		if (!video.length) {
+			return;
+		};
+
+		this.div = 16 / 9;
+		this.onResizeInit();
+
+		video.on('canplay', (e: any) => {
+			const el = video.get(0);
+
+			this.div = el.videoWidth / el.videoHeight;
+			this.onResizeInit();
+		});
+	};
 	
 	rebind () {
 		if (!this._isMounted) {
 			return;
 		};
 		
-		const node = $(this.node);
-		const video = node.find('video');
-		const el = video.get(0);
-		
 		this.unbind();
 		
+		const node = $(this.node);
 		node.on('resizeStart', (e: any, oe: any) => this.onResizeStart(oe, true));
 		node.on('resizeMove', (e: any, oe: any) => this.onResizeMove(oe, true));
 		node.on('resizeEnd', (e: any, oe: any) => this.onResizeEnd(oe, true));
 		node.on('resizeInit', (e: any, oe: any) => this.onResizeInit());
-		
-		if (video.length) {
-			this.div = 16 / 9;
-			this.onResizeInit();
-
-			video.on('canplay', (e: any) => {
-				this.div = el.videoWidth / el.videoHeight;
-				this.onResizeInit();
-			});
-		};
 	};
 	
 	unbind () {
@@ -165,8 +171,7 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 	};
 
 	onFocus () {
-		const { block } = this.props;
-		focus.set(block.id, { from: 0, to: 0 });
+		focus.set(this.props.block.id, { from: 0, to: 0 });
 	};
 	
 	onChangeUrl (e: any, url: string) {
@@ -196,7 +201,6 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 			return;
 		};
 		
-		const win = $(window);
 		const node = $(this.node);
 		const wrap = node.find('.wrap');
 		
@@ -204,12 +208,9 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 			return;
 		};
 		
-		const w = this.getWidth(true, 0);
-		const h = this.getHeight(w);
-		
-		wrap.css({ width: (w * 100) + '%', height: h });
+		wrap.css({ width: (this.getWidth(true, 0) * 100) + '%' });
 	};
-	
+
 	onResizeStart (e: any, checkMax: boolean) {
 		e.preventDefault();
 		e.stopPropagation();
@@ -221,7 +222,6 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 		const { dataset, block } = this.props;
 		const { selection } = dataset || {};
 		const win = $(window);
-		const node = $(this.node);
 		
 		focus.set(block.id, { from: 0, to: 0 });
 		win.off('mousemove.media mouseup.media');
@@ -230,8 +230,9 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 			selection.hide();
 		};
 
+		keyboard.setResize(true);
 		keyboard.disableSelection(true);
-		node.addClass('isResizing');
+		$(`#block-${block.id}`).addClass('isResizing');
 		win.on('mousemove.media', e => this.onResizeMove(e, checkMax));
 		win.on('mouseup.media', e => this.onResizeEnd(e, checkMax));
 	};
@@ -253,9 +254,8 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 		
 		const rect = (wrap.get(0) as Element).getBoundingClientRect() as DOMRect;
 		const w = this.getWidth(checkMax, e.pageX - rect.x + 20);
-		const h = this.getHeight(w);
 		
-		wrap.css({ width: (w * 100) + '%', height: h });
+		wrap.css({ width: (w * 100) + '%' });
 	};
 	
 	onResizeEnd (e: any, checkMax: boolean) {
@@ -277,8 +277,9 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 		const w = this.getWidth(checkMax, e.pageX - rect.x + 20);
 		
 		win.off('mousemove.media mouseup.media');
-		node.removeClass('isResizing');
+		$(`#block-${block.id}`).removeClass('isResizing');
 		keyboard.disableSelection(false);
+		keyboard.setResize(false);
 		
 		C.BlockListSetFields(rootId, [
 			{ blockId: id, fields: { width: w } },
@@ -288,11 +289,9 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 	getWidth (checkMax: boolean, v: number): number {
 		const { block } = this.props;
 		const { id, fields } = block;
-		
-		let { width } = fields;
-		width = Number(width) || 1;
-		
-		const el = $('#selectable-' + id);
+		const width = Number(fields.width) || 1;
+		const el = $(`#selectable-${id}`);
+
 		if (!el.length) {
 			return width;
 		};
@@ -301,18 +300,6 @@ const BlockVideo = observer(class BlockVideo extends React.Component<I.BlockComp
 		const w = Math.min(rect.width, Math.max(160, checkMax ? width * rect.width : v));
 		
 		return Math.min(1, Math.max(0, w / rect.width));
-	};
-	
-	getHeight (p: number) {
-		const { block } = this.props;
-		const el = $('#selectable-' + block.id);
-		
-		if (!el.length) {
-			return 0;
-		};
-		
-		const rect = el.get(0).getBoundingClientRect() as DOMRect;
-		return Math.floor(p * rect.width / (this.div || 1));
 	};
 	
 });

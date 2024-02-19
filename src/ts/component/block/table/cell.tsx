@@ -22,7 +22,7 @@ const BlockTableCell = observer(class BlockTableCell extends React.Component<Pro
 	render () {
 		const { 
 			readonly, block, rowIdx, columnIdx, row, column, onHandleRow, onHandleColumn, onOptions, onCellFocus, onCellBlur, onCellClick, onCellEnter, 
-			onCellLeave, onCellKeyDown, onResizeStart, onDragStartColumn, onDragStartRow, onEnterHandle, onLeaveHandle, onCellUpdate
+			onCellLeave, onCellKeyDown, onCellKeyUp, onResizeStart, onDragStartColumn, onDragStartRow, onEnterHandle, onLeaveHandle, onCellUpdate
 		} = this.props;
 
 		if (!row || !column) {
@@ -39,17 +39,18 @@ const BlockTableCell = observer(class BlockTableCell extends React.Component<Pro
 		};
 
 		const Handle = (item: any) => {
+			const cn = [ 'handle' ];
+
 			let onDragStart = null;
 			let onClick = null;
-			const cn = [ 'handle' ];
 			let canDrag = true;
 
 			switch (item.type) {
 				case I.BlockType.TableColumn:
 					cn.push('handleColumn canDrag');
 
-					onDragStart = (e: any) => { onDragStartColumn(e, column.id); };
-					onClick = (e: any) => { onHandleColumn(e, item.type, row.id, column.id, cellId); };
+					onDragStart = e => onDragStartColumn(e, column.id);
+					onClick = e => onHandleColumn(e, item.type, row.id, column.id, cellId);
 					break;
 
 				case I.BlockType.TableRow:
@@ -57,9 +58,9 @@ const BlockTableCell = observer(class BlockTableCell extends React.Component<Pro
 					canDrag = !isHeader;
 
 					if (canDrag) {
-						onDragStart = (e: any) => { onDragStartRow(e, row.id); };
+						onDragStart = e => onDragStartRow(e, row.id);
 					};
-					onClick = (e: any) => { onHandleRow(e, item.type, row.id, column.id, cellId); };
+					onClick = e => onHandleRow(e, item.type, row.id, column.id, cellId);
 					break;
 			};
 
@@ -71,8 +72,8 @@ const BlockTableCell = observer(class BlockTableCell extends React.Component<Pro
 				<div 
 					className={cn.join(' ')}
 					draggable={canDrag}
-					onMouseEnter={(e: any) => { onEnterHandle(e, item.type, row.id, column.id); }}
-					onMouseLeave={(e: any) => { onLeaveHandle(e); }}
+					onMouseEnter={e => onEnterHandle(e, item.type, row.id, column.id)}
+					onMouseLeave={e => onLeaveHandle(e)}
 					onClick={onClick}
 					onDragStart={onDragStart}
 					onContextMenu={onClick}
@@ -98,15 +99,17 @@ const BlockTableCell = observer(class BlockTableCell extends React.Component<Pro
 							<div className="dropTarget">
 								<div className="flex">
 									<div className="markers" />
-									<div
-										id="value"
-										className={cv.join(' ')}
-										contentEditable={!readonly}
-										suppressContentEditableWarning={true}
-										onFocus={(e: any) => { onCellFocus(e, row.id, column.id, cellId); }}
-										onBlur={(e: any) => { onCellBlur(e, row.id, column.id, cellId); }}
-										onDragStart={(e: any) => { e.preventDefault(); }}
-									/>
+									<div className="editableWrap">
+										<div
+											id="value"
+											className={cv.join(' ')}
+											contentEditable={!readonly}
+											suppressContentEditableWarning={true}
+											onFocus={e => onCellFocus(e, row.id, column.id, cellId)}
+											onBlur={e => onCellBlur(e, row.id, column.id, cellId)}
+											onDragStart={e => e.preventDefault()}
+										/>
+									</div>
 								</div>
 							</div>
 						</div>
@@ -119,9 +122,9 @@ const BlockTableCell = observer(class BlockTableCell extends React.Component<Pro
 			<div
 				id={`cell-${cellId}`}
 				className={cn.join(' ')}
-				onClick={(e: any) => { onCellClick(e, row.id, column.id, cellId); }}
-				onMouseEnter={(e: any) => { onCellEnter(e, row.id, column.id, cellId); }}
-				onMouseLeave={(e: any) => { onCellLeave(e, row.id, column.id, cellId); }}
+				onClick={e => onCellClick(e, row.id, column.id, cellId)}
+				onMouseEnter={e => onCellEnter(e, row.id, column.id, cellId)}
+				onMouseLeave={e => onCellLeave(e, row.id, column.id, cellId)}
 				onMouseDown={this.onMouseDown}
 				{...UtilCommon.dataProps({ 'column-id': column.id })}
 			>
@@ -138,24 +141,27 @@ const BlockTableCell = observer(class BlockTableCell extends React.Component<Pro
 						onKeyDown={(e: any, text: string, marks: I.Mark[], range: I.TextRange, props: any) => { 
 							onCellKeyDown(e, row.id, column.id, cellId, text, marks, range, props);
 						}}
-						onUpdate={() => { onCellUpdate(cellId); }}
-						onFocus={(e: any) => { onCellFocus(e, row.id, column.id, cellId); }}
-						onBlur={(e: any) => { onCellBlur(e, row.id, column.id, cellId); }}
+						onKeyUp={(e: any, text: string, marks: I.Mark[], range: I.TextRange, props: any) => { 
+							onCellKeyUp(e, row.id, column.id, cellId, text, marks, range, props);
+						}}
+						onUpdate={() => onCellUpdate(cellId)}
+						onFocus={e => onCellFocus(e, row.id, column.id, cellId)}
+						onBlur={e => onCellBlur(e, row.id, column.id, cellId)}
 						getWrapperWidth={() => Constant.size.editor} 
 					/>
 				) : (
 					<EmptyBlock />
 				)}
 
-				{!readonly ? <div className="resize" onMouseDown={(e: any) => { onResizeStart(e, column.id); }} /> : ''}
-				<Icon className="menu" inner={inner} onClick={(e: any) => { onOptions(e, I.BlockType.Text, row.id, column.id, cellId); }} />
+				{!readonly ? <div className="resize" onMouseDown={e => onResizeStart(e, column.id)} /> : ''}
+				<Icon className="menu" inner={inner} onClick={e => onOptions(e, I.BlockType.Text, row.id, column.id, cellId)} />
 			</div>
 		);
 	};
 
 	onMouseDown (e: any) {
 		keyboard.disableSelection(true);
-		$(window).off('mousedown.table-cell').on('mousedown.table-cell', (e: any) => { keyboard.disableSelection(false); });
+		$(window).off('mousedown.table-cell').on('mousedown.table-cell', () => keyboard.disableSelection(false));
 	};
 
 });

@@ -1,6 +1,7 @@
-import { I, C, keyboard, translate, UtilCommon, Storage, analytics, dispatcher, Mark, UtilObject } from 'Lib';
-import { commonStore, blockStore, detailStore, dbStore, authStore } from 'Store';
+import { I, C, keyboard, translate, UtilCommon, UtilRouter, Storage, analytics, dispatcher, Mark, UtilObject, focus } from 'Lib';
+import { commonStore, blockStore, detailStore, dbStore, authStore, notificationStore } from 'Store';
 import Constant from 'json/constant.json';
+import * as Sentry from '@sentry/browser';
 
 type SearchSubscribeParams = Partial<{
 	subId: string;
@@ -21,6 +22,14 @@ type SearchSubscribeParams = Partial<{
 	noDeps: boolean;
 }>;
 
+const SYSTEM_DATE_RELATION_KEYS = [
+	'lastModifiedDate', 
+	'lastOpenedDate', 
+	'createdDate',
+	'addedDate',
+	'lastUsedDate',
+];
+
 class UtilData {
 
 	blockTextClass (v: I.TextStyle): string {
@@ -33,6 +42,10 @@ class UtilData {
 
 	blockLayoutClass (v: I.LayoutStyle): string {
 		return UtilCommon.toCamelCase('layout-' + String(I.LayoutStyle[v]));
+	};
+
+	blockEmbedClass (v: I.EmbedProcessor): string {
+		return `is${I.EmbedProcessor[v]}`;
 	};
 
 	styleIcon (type: I.BlockType, v: number): string {
@@ -58,40 +71,50 @@ class UtilData {
 
 	blockClass (block: any) {
 		const { content } = block;
-		const { style, type, state } = content;
-		const dc = UtilCommon.toCamelCase('block-' + block.type);
-
+		const { style, type, processor } = content;
+		const dc = UtilCommon.toCamelCase(`block-${block.type}`);
 		const c = [];
-		if (block.type == I.BlockType.File) {
-			if ((style == I.FileStyle.Link) || (type == I.FileType.File)) {
-				c.push(dc);
-			} else {
-				c.push('blockMedia');
 
-				switch (type) {
-					case I.FileType.Image:	 c.push('isImage'); break;
-					case I.FileType.Video:	 c.push('isVideo'); break;
-					case I.FileType.Audio:	 c.push('isAudio'); break;
-					case I.FileType.Pdf:	 c.push('isPdf'); break;
+		switch (block.type) {
+			case I.BlockType.File: {
+				if ((style == I.FileStyle.Link) || (type == I.FileType.File)) {
+					c.push(dc);
+				} else {
+					c.push('blockMedia');
+
+					switch (type) {
+						case I.FileType.Image:	 c.push('isImage'); break;
+						case I.FileType.Video:	 c.push('isVideo'); break;
+						case I.FileType.Audio:	 c.push('isAudio'); break;
+						case I.FileType.Pdf:	 c.push('isPdf'); break;
+					};
 				};
+				break;
 			};
-		} else {
-			c.push(dc);
 
-			switch (block.type) {
-				case I.BlockType.Text:					 c.push(this.blockTextClass(style)); break;
-				case I.BlockType.Layout:				 c.push(this.blockLayoutClass(style)); break;
-				case I.BlockType.Div:					 c.push(this.blockDivClass(style)); break;
+			case I.BlockType.Embed: {
+				c.push('blockEmbed');
+				c.push(this.blockEmbedClass(processor));
+				break;
+			};
+
+			default: {
+				c.push(dc);
+				switch (block.type) {
+					case I.BlockType.Text:					 c.push(this.blockTextClass(style)); break;
+					case I.BlockType.Layout:				 c.push(this.blockLayoutClass(style)); break;
+					case I.BlockType.Div:					 c.push(this.blockDivClass(style)); break;
+				};
+				break;
 			};
 		};
-
 		return c.join(' ');
 	};
 
 	layoutClass (id: string, layout: I.ObjectLayout) {
 		let c = '';
 		switch (layout) {
-			default: c = UtilCommon.toCamelCase('is-' + I.ObjectLayout[layout]); break;
+			default: c = UtilCommon.toCamelCase(`is-${I.ObjectLayout[layout]}`); break;
 			case I.ObjectLayout.Image:		 c = (id ? 'isImage' : 'isFile'); break;
 		};
 		return c;
@@ -180,23 +203,27 @@ class UtilData {
 		};
 		return ids;
 	};
+
+	onInfo (info: I.AccountInfo) {
+		blockStore.rootSet(info.homeObjectId);
+		blockStore.widgetsSet(info.widgetsId);
+		blockStore.profileSet(info.profileObjectId);
+		blockStore.spaceviewSet(info.spaceViewId);
+
+		commonStore.gatewaySet(info.gatewayUrl);
+		commonStore.spaceSet(info.accountSpaceId);
+
+		analytics.profile(info.analyticsId, info.networkId);
+		Sentry.setUser({ id: info.analyticsId });
+	};
 	
-	onAuth (account: I.Account, param?: any, callBack?: () => void) {
-		if (!account) {
-			console.error('[onAuth] No account defined');
-			return;
-		};
-
-		commonStore.infoSet(account.info);
-		commonStore.configSet(account.config, false);
-		authStore.accountSet(account);
-
+	onAuth (param?: any, callBack?: () => void) {
 		const pin = Storage.get('pin');
-		const { profile, widgets, root } = blockStore;
-		const { redirect } = commonStore;
+		const { profile, widgets } = blockStore;
+		const { redirect, space } = commonStore;
 		const color = Storage.get('color');
 		const bgColor = Storage.get('bgColor');
-		const routeParam = Object.assign({ replace: true}, (param || {}).routeParam || {});
+		const routeParam = Object.assign({ replace: true }, (param || {}).routeParam || {});
 
 		if (!profile) {
 			console.error('[onAuth] No profile defined');
@@ -211,32 +238,31 @@ class UtilData {
 		keyboard.initPinCheck();
 		analytics.event('OpenAccount');
 
-		C.FileSpaceUsage((message) => {
-			if (!message.error.code) {
-				commonStore.spaceStorageSet(message);
-			};
-		});
-
-		C.ObjectOpen(root, '', (message: any) => {
+		C.ObjectOpen(blockStore.rootId, '', space, (message: any) => {
 			if (!UtilCommon.checkError(message.error.code)) {
 				return;
 			};
 
-			const object = detailStore.get(root, root, Constant.coverRelationKeys, true);
-			if (object._empty_) {
-				console.error('Dashboard is empty');
-				return;
-			};
+			C.ObjectOpen(widgets, '', space, () => {
+				this.createSubscriptions(() => {
+					C.NotificationList(false, Constant.limit.notification, (message: any) => {
+						if (!message.error.code) {
+							notificationStore.set(message.list);
+						};
+					});
 
-			C.ObjectOpen(widgets, '', () => {
-				this.createsSubscriptions(() => {
-					commonStore.defaultTypeSet(commonStore.type);
+					C.FileNodeUsage((message: any) => {
+						if (!message.error.code) {
+							commonStore.spaceStorageSet(message);
+						};
+					});
 
+					// Redirect
 					if (pin && !keyboard.isPinChecked) {
-						UtilCommon.route('/auth/pin-check', routeParam);
+						UtilRouter.go('/auth/pin-check', routeParam);
 					} else {
 						if (redirect) {
-							UtilCommon.route(redirect, routeParam);
+							UtilRouter.go(redirect, routeParam);
 						} else {
 							UtilObject.openHome('route', routeParam);
 						};
@@ -255,20 +281,24 @@ class UtilData {
 						callBack();
 					};
 				});
-
-				if (profile) {
-					this.subscribeIds({
-						subId: Constant.subId.profile, 
-						ids: [ profile ], 
-						noDeps: true,
-					});
-				};
 			});
 		});
 	};
 
-	createsSubscriptions (callBack?: () => void): void {
+	createSubscriptions (callBack?: () => void): void {
+		const { space } = commonStore;
+		const { account } = authStore;
+
 		const list = [
+			{
+				subId: Constant.subId.profile,
+				filters: [
+					{ operator: I.FilterOperator.And, relationKey: 'id', condition: I.FilterCondition.Equal, value: blockStore.profile },
+				],
+				noDeps: true,
+				ignoreWorkspace: true,
+				ignoreHidden: false,
+			},
 			{
 				subId: Constant.subId.deleted,
 				keys: [],
@@ -276,50 +306,90 @@ class UtilData {
 					{ operator: I.FilterOperator.And, relationKey: 'isDeleted', condition: I.FilterCondition.Equal, value: true },
 				],
 				noDeps: true,
-				ignoreWorkspace: true,
 			},
 			{
 				subId: Constant.subId.type,
-				keys: Constant.defaultRelationKeys.concat(Constant.typeRelationKeys),
+				keys: this.typeRelationKeys(),
 				filters: [
-					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.In, value: [ Constant.typeId.type, Constant.storeTypeId.type ] },
+					{ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.In, value: [ Constant.storeSpaceId, space ] },
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.In, value: I.ObjectLayout.Type },
 				],
-				noDeps: true,
-				ignoreWorkspace: true,
-				ignoreDeleted: true,
-			},
-			{
-				subId: Constant.subId.relation,
-				keys: Constant.relationRelationKeys,
-				filters: [
-					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.In, value: [ Constant.typeId.relation, Constant.storeTypeId.relation ] },
+				sorts: [
+					{ relationKey: 'spaceId', type: I.SortType.Desc },
+					{ relationKey: 'lastUsedDate', type: I.SortType.Desc },
+					{ relationKey: 'name', type: I.SortType.Asc },
 				],
 				noDeps: true,
 				ignoreWorkspace: true,
 				ignoreDeleted: true,
 				ignoreHidden: false,
 				onSubscribe: () => {
-					dbStore.getRelations().forEach(it => dbStore.relationKeyMap[it.relationKey] = it.id);
+					dbStore.getTypes().forEach(it => dbStore.typeKeyMapSet(it.spaceId, it.uniqueKey, it.id));
 				}
+			},
+			{
+				subId: Constant.subId.relation,
+				keys: Constant.relationRelationKeys,
+				filters: [
+					{ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.In, value: [ Constant.storeSpaceId, space ] },
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.In, value: I.ObjectLayout.Relation },
+				],
+				noDeps: true,
+				ignoreWorkspace: true,
+				ignoreDeleted: true,
+				ignoreHidden: false,
+				onSubscribe: () => {
+					dbStore.getRelations().forEach(it => dbStore.relationKeyMapSet(it.spaceId, it.relationKey, it.id));
+				},
 			},
 			{
 				subId: Constant.subId.option,
 				keys: Constant.optionRelationKeys,
 				filters: [
-					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.typeId.option },
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Option },
+				],
+				sorts: [
+					{ relationKey: 'name', type: I.SortType.Asc },
 				],
 				noDeps: true,
 				ignoreDeleted: true,
 			},
 			{
 				subId: Constant.subId.space,
-				keys: Constant.defaultRelationKeys.concat([ 'spaceDashboardId', 'spaceAccessibility', 'createdDate' ]),
+				keys: this.spaceRelationKeys(),
 				filters: [
-					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.typeId.space },
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.SpaceView },
+				],
+				sorts: [
+					{ relationKey: 'lastOpenedDate', type: I.SortType.Desc },
 				],
 				ignoreWorkspace: true,
 				ignoreHidden: false,
-			}
+			},
+			{
+				subId: Constant.subId.participant,
+				keys: this.participantRelationKeys(),
+				filters: [
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Participant },
+				],
+				sorts: [
+					{ relationKey: 'name', type: I.SortType.Asc },
+				],
+				ignoreDeleted: true,
+			},
+			{
+				subId: Constant.subId.myParticipant,
+				keys: this.participantRelationKeys(),
+				filters: [
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Participant },
+					{ operator: I.FilterOperator.And, relationKey: 'identity', condition: I.FilterCondition.Equal, value: account.id },
+				],
+				sorts: [
+					{ relationKey: 'name', type: I.SortType.Asc },
+				],
+				ignoreWorkspace: true,
+				ignoreDeleted: true,
+			},
 		];
 
 		let cnt = 0;
@@ -340,10 +410,25 @@ class UtilData {
 		};
 	};
 
+	spaceRelationKeys () {
+		return Constant.defaultRelationKeys.concat(Constant.spaceRelationKeys).concat(Constant.participantRelationKeys);
+	};
+
+	typeRelationKeys () {
+		return Constant.defaultRelationKeys.concat(Constant.typeRelationKeys);
+	};
+
+	participantRelationKeys () {
+		return Constant.defaultRelationKeys.concat(Constant.participantRelationKeys);
+	};
+
 	createSession (callBack?: (message: any) => void) {
-		C.WalletCreateSession(authStore.phrase, (message: any) => {
-			authStore.tokenSet(message.token);
-			dispatcher.listenEvents();
+		C.WalletCreateSession(authStore.phrase, authStore.appKey, (message: any) => {
+			if (!message.error.code) {
+				authStore.tokenSet(message.token);
+				authStore.appTokenSet(message.appToken);
+				dispatcher.listenEvents();
+			};
 
 			if (callBack) {
 				callBack(message);
@@ -352,6 +437,11 @@ class UtilData {
 	};
 
 	blockSetText (rootId: string, blockId: string, text: string, marks: I.Mark[], update: boolean, callBack?: (message: any) => void) {
+		const block = blockStore.getLeaf(rootId, blockId);
+		if (!block) {
+			return;
+		};
+
 		text = String(text || '');
 		marks = marks || [];
 
@@ -359,11 +449,7 @@ class UtilData {
 			blockStore.updateContent(rootId, blockId, { text, marks });
 		};
 
-		C.BlockTextSetText(rootId, blockId, text, marks, (message: any) => {
-			if (callBack) {
-				callBack(message);
-			};
-		});
+		C.BlockTextSetText(rootId, blockId, text, marks, focus.state.range, callBack);
 	};
 
 	blockInsertText (rootId: string, blockId: string, needle: string, from: number, to: number, callBack?: (message: any) => void) {
@@ -374,73 +460,52 @@ class UtilData {
 
 		const diff = needle.length - (to - from);
 		const text = UtilCommon.stringInsert(block.content.text, needle, from, to);
-		const marks = Mark.adjust(block.content.marks, 0, diff);
+		const marks = Mark.adjust(block.content.marks, from, diff);
 
 		this.blockSetText(rootId, blockId, text, marks, true, callBack);
 	};
 
 	getObjectTypesForNewObject (param?: any) {
-		const { withSet, withBookmark, withCollection, withDefault } = param || {};
-		const { workspace, config } = commonStore;
+		const { withSet, withBookmark, withCollection, limit } = param || {};
+		const { space, config } = commonStore;
 		const pageLayouts = UtilObject.getPageLayouts();
-		const page = dbStore.getType(Constant.typeId.page);
-		const note = dbStore.getType(Constant.typeId.note);
-		const set = dbStore.getType(Constant.typeId.set);
-		const task = dbStore.getType(Constant.typeId.task);
-		const bookmark = dbStore.getType(Constant.typeId.bookmark);
-		const collection = dbStore.getType(Constant.typeId.collection);
+		const skipLayouts = UtilObject.getSetLayouts();
 
-		const skip = [ 
-			Constant.typeId.note, 
-			Constant.typeId.page, 
-			Constant.typeId.set, 
-			Constant.typeId.collection,
-			Constant.typeId.task,
-			Constant.typeId.bookmark,
-		];
-	
+		if (!withBookmark) {
+			skipLayouts.push(I.ObjectLayout.Bookmark);
+		};
+
 		let items: any[] = [];
 
-		if (!withDefault) {
-			items = items.concat(dbStore.getTypes().filter(it => {
-				if (!pageLayouts.includes(it.recommendedLayout) || skip.includes(it.id) || (it.workspaceId != workspace)) {
-					return false;
-				};
-				return config.debug.ho ? true : !it.isHidden;
-			}));
+		items = items.concat(dbStore.getTypes().filter(it => {
+			return pageLayouts.includes(it.recommendedLayout) && !skipLayouts.includes(it.recommendedLayout) && (it.spaceId == space);
+		}));
+
+		if (limit) {
+			items = items.slice(0, limit);
 		};
 
-		if (withBookmark && bookmark) {
-			items.unshift(bookmark);
+		if (withSet) {
+			items.push(dbStore.getSetType());
 		};
 
-		items.sort(this.sortByName);
-
-		if (withCollection && collection) {
-			items.unshift(collection);
+		if (withCollection) {
+			items.push(dbStore.getCollectionType());
 		};
 
-		if (withSet && set) {
-			items.unshift(set);
+		items = items.filter(it => it);
+
+		if (!config.debug.ho) {
+			items = items.filter(it => !it.isHidden);
 		};
 
-		if (task) {
-			items.unshift(task);
-		};
-
-		if (page && note) {
-			if (commonStore.type == Constant.typeId.note) {
-				items = [ page, note ].concat(items);
-			} else {
-				items = [ note, page ].concat(items);
-			};
-		};
 		return items;
 	};
 
 	getTemplatesByTypeId (typeId: string, callBack: (message: any) => void) {
+		const templateType = dbStore.getTemplateType();
 		const filters: I.Filter[] = [
-			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.typeId.template },
+			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: templateType?.id },
 			{ operator: I.FilterOperator.And, relationKey: 'targetObjectType', condition: I.FilterCondition.In, value: typeId },
 		];
 		const sorts = [
@@ -459,14 +524,19 @@ class UtilData {
 	checkDetails (rootId: string, blockId?: string) {
 		blockId = blockId || rootId;
 
-		const object = detailStore.get(rootId, blockId, [ 'layoutAlign', 'templateIsBundled' ].concat(Constant.coverRelationKeys));
-		const childrenIds = blockStore.getChildrenIds(rootId, blockId);
+		const object = detailStore.get(rootId, blockId, [ 'layout', 'layoutAlign', 'iconImage', 'iconEmoji', 'templateIsBundled' ].concat(Constant.coverRelationKeys), true);
 		const checkType = blockStore.checkBlockTypeExists(rootId);
 		const { iconEmoji, iconImage, coverType, coverId } = object;
-		const ret: any = {
-			withCover: Boolean((coverType != I.CoverType.None) && coverId),
+		const ret = {
+			withCover: false,
 			withIcon: false,
-			className: [ this.layoutClass(object.id, object.layout), 'align' + object.layoutAlign ],
+			className: '',
+		};
+
+		let className = [];
+		if (!object._empty_) {
+			ret.withCover = Boolean((coverType != I.CoverType.None) && coverId);
+			className = [ this.layoutClass(object.id, object.layout), 'align' + object.layoutAlign ];
 		};
 
 		switch (object.layout) {
@@ -480,37 +550,39 @@ class UtilData {
 			};
 
 			case I.ObjectLayout.Human:
-			case I.ObjectLayout.Relation:
-			case I.ObjectLayout.File:
-			case I.ObjectLayout.Image: {
+			case I.ObjectLayout.Relation: {
 				ret.withIcon = true;
 				break;
 			};
 		};
 
+		if (UtilObject.isFileLayout(object.layout)) {
+			ret.withIcon = true;
+		};
+
 		if (checkType) {
-			ret.className.push('noSystemBlocks');
+			className.push('noSystemBlocks');
 		};
 
 		if ((object.featuredRelations || []).includes('description')) {
-			ret.className.push('withDescription');
+			className.push('withDescription');
 		};
 
 		if (object.templateIsBundled) {
-			ret.className.push('isBundled');
+			className.push('isBundled');
 		};
 
 		if (ret.withIcon && ret.withCover) {
-			ret.className.push('withIconAndCover');
+			className.push('withIconAndCover');
 		} else
 		if (ret.withIcon) {
-			ret.className.push('withIcon');
+			className.push('withIcon');
 		} else
 		if (ret.withCover) {
-			ret.className.push('withCover');
+			className.push('withCover');
 		};
 
-		ret.className = ret.className.join(' ');
+		ret.className = className.join(' ');
 		return ret;
 	};
 
@@ -540,6 +612,21 @@ class UtilData {
 		return this.sortByName(c1, c2);
 	};
 
+	sortByPinnedTypes (c1: any, c2: any, ids: string[]) {
+		const idx1 = ids.indexOf(c1.id);
+		const idx2 = ids.indexOf(c2.id);
+
+		if (idx1 > idx2) return 1;
+		if (idx1 < idx2) return -1;
+		return 0;
+	};
+
+	sortByNumericKey (key: string, c1: any, c2: any, dir: I.SortType) {
+		if (c1[key] > c2[key]) return dir == I.SortType.Asc ? 1 : -1;
+		if (c1[key] < c2[key]) return dir == I.SortType.Asc ? -1 : 1;
+		return this.sortByName(c1, c2);
+	};
+
 	checkObjectWithRelationCnt (relationKey: string, type: string, ids: string[], limit: number, callBack?: (message: any) => void) {
 		const filters: I.Filter[] = [
 			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: type },
@@ -560,22 +647,10 @@ class UtilData {
 		});
 	};
 
-	// Check if there are at least 1 template for object types
-	checkTemplateCnt (ids: string[], callBack?: (cnt: number) => void) {
-		this.checkObjectWithRelationCnt('targetObjectType', Constant.typeId.template, ids, 1, (message: any) => {
-			if (callBack) {
-				callBack(message.records.length);
-			};
-		});
-	};
-
-	checkBlankTemplate (template: any) {
-		return template && (template.id != Constant.templateId.blank) ? template : null;
-	};
-
 	// Check if there is at least 1 set for object types
 	checkSetCnt (ids: string[], callBack?: (message: any) => void) {
-		this.checkObjectWithRelationCnt('setOf', Constant.typeId.set, ids, 2, callBack);
+		const setType = dbStore.getTypeByKey(Constant.typeKey.set);
+		this.checkObjectWithRelationCnt('setOf', setType?.id, ids, 2, callBack);
 	};
 
 	defaultLinkSettings () {
@@ -623,12 +698,12 @@ class UtilData {
 			dbStore.metaSet(subId, '', { total: message.counters.total, keys });
 		};
 
-		let details = [];
 		const mapper = (it: any) => { 
-			keys.forEach((k: string) => { it[k] = it[k] || ''; });
+			keys.forEach(k => it[k] = it[k] || '');
 			return { id: it[idField], details: it }; 
 		};
 
+		let details = [];
 		details = details.concat(message.dependencies.map(mapper));
 		details = details.concat(message.records.map(mapper));
 
@@ -637,7 +712,7 @@ class UtilData {
 	};
 
 	searchSubscribe (param: SearchSubscribeParams, callBack?: (message: any) => void) {
-		const { config, workspace } = commonStore;
+		const { config, space } = commonStore;
 
 		param = Object.assign({
 			subId: '',
@@ -667,8 +742,8 @@ class UtilData {
 			return;
 		};
 
-		if (!ignoreWorkspace && workspace) {
-			filters.push({ operator: I.FilterOperator.And, relationKey: 'workspaceId', condition: I.FilterCondition.Equal, value: workspace });
+		if (!ignoreWorkspace) {
+			filters.push({ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.In, value: [ space ] });
 		};
 
 		if (ignoreHidden && !config.debug.ho) {
@@ -734,7 +809,7 @@ class UtilData {
 	};
 
 	search (param: SearchSubscribeParams & { fullText?: string }, callBack?: (message: any) => void) {
-		const { config, workspace } = commonStore;
+		const { config, space } = commonStore;
 
 		param = Object.assign({
 			idField: 'id',
@@ -753,8 +828,8 @@ class UtilData {
 		const { idField, filters, sorts, offset, limit, ignoreWorkspace, ignoreDeleted, ignoreHidden, withArchived } = param;
 		const keys: string[] = [ ...new Set(param.keys as string[]) ];
 
-		if (!ignoreWorkspace && workspace) {
-			filters.push({ operator: I.FilterOperator.And, relationKey: 'workspaceId', condition: I.FilterCondition.Equal, value: workspace });
+		if (!ignoreWorkspace) {
+			filters.push({ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.In, value: [ space ] });
 		};
 
 		if (ignoreHidden && !config.debug.ho) {
@@ -773,13 +848,19 @@ class UtilData {
 			keys.push(idField);
 		};
 
-		C.ObjectSearch(filters, sorts.map(this.sortMapper), keys, UtilCommon.regexEscape(param.fullText), offset, limit, callBack);
+		C.ObjectSearch(filters, sorts.map(this.sortMapper), keys, param.fullText, offset, limit, (message: any) => {
+			if (message.records) {
+				message.records = message.records.map(it => detailStore.mapper(it));
+			};
+
+			if (callBack) {
+				callBack(message);
+			};
+		});
 	};
 
 	sortMapper (it: any) {
-		if ([ 'lastModifiedDate', 'lastOpenedDate', 'createdDate' ].includes(it.relationKey)) {
-			it.includeTime = true;
-		};
+		it.includeTime = SYSTEM_DATE_RELATION_KEYS.includes(it.relationKey);
 		return it;
 	};
 
@@ -788,7 +869,7 @@ class UtilData {
 	};
 
 	setWindowTitleText (name: string) {
-		const space = UtilObject.getSpace();
+		const space = UtilObject.getSpaceview();
 		const title = [];
 
 		if (name) {
@@ -804,19 +885,88 @@ class UtilData {
 	};
 
 	graphFilters () {
-		const { workspace } = commonStore;
-		const skipTypes = UtilObject.getFileTypes().concat(UtilObject.getSystemTypes());
-		const skipIds = [ '_anytype_profile' ];
-
-		return [
+		const { space } = commonStore;
+		const templateType = dbStore.getTemplateType();
+		const filters = [
 			{ operator: I.FilterOperator.And, relationKey: 'isHidden', condition: I.FilterCondition.NotEqual, value: true },
 			{ operator: I.FilterOperator.And, relationKey: 'isArchived', condition: I.FilterCondition.NotEqual, value: true },
 			{ operator: I.FilterOperator.And, relationKey: 'isDeleted', condition: I.FilterCondition.NotEqual, value: true },
-			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: skipTypes },
-			{ operator: I.FilterOperator.And, relationKey: 'id', condition: I.FilterCondition.NotIn, value: skipIds },
-			{ operator: I.FilterOperator.And, relationKey: 'workspaceId', condition: I.FilterCondition.Equal, value: workspace },
+			{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.NotIn, value: UtilObject.getFileAndSystemLayouts() },
+			{ operator: I.FilterOperator.And, relationKey: 'id', condition: I.FilterCondition.NotIn, value: [ '_anytype_profile' ] },
+			{ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.In, value: [ space ] },
 		];
+
+		if (templateType) {
+			filters.push({ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: [ templateType.id ] },);
+		};
+		return filters;
 	};
+
+	moveToPage (rootId: string, blockId: string, typeId: string, route: string, props: any) {
+		const { dataset } = props;
+		const { selection } = dataset || {};
+		const type = dbStore.getTypeById(typeId);
+		
+		let ids = [];
+		if (selection) {
+			ids = selection.get(I.SelectType.Block);
+		};
+		if (!ids.length) {
+			ids = [ blockId ];
+		};
+
+		C.BlockListConvertToObjects(rootId, ids, type?.uniqueKey, () => {
+			analytics.event('CreateObject', { route, objectType: typeId });
+		});
+	};
+
+	getThreadStatus (rootId: string, key: string) {
+		const { account } = authStore;
+
+		if (!account) {
+			return I.ThreadStatus.Unknown;
+		};
+
+		const { info } = account || {};
+		const thread = authStore.threadGet(rootId);
+		const { summary } = thread;
+
+		if (!info.networkId) {
+			return I.ThreadStatus.Local;
+		};
+
+		if (!summary) {
+			return I.ThreadStatus.Unknown;
+		};
+
+		return (thread[key] || {}).status || I.ThreadStatus.Unknown;
+	};
+
+	getNetworkName (): string {
+		const { account } = authStore;
+		const { info } = account;
+
+		let ret = '';
+		switch (info.networkId) {
+			default:
+				ret = translate('menuThreadListSelf');
+				break;
+
+			case Constant.networkId.production:
+				ret = translate('menuThreadListProduction');
+				break;
+
+			case Constant.networkId.development:
+				ret = translate('menuThreadListDevelopment');
+				break;
+
+			case '':
+				ret = translate('menuThreadListLocal');
+				break;
+		};
+		return ret;
+	};
+
 };
 
 export default new UtilData();

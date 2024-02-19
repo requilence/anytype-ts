@@ -1,13 +1,11 @@
 import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
-import { Cell, Cover, Icon, MediaAudio, MediaVideo, DropTarget } from 'Component';
+import { Cell, Cover, MediaAudio, MediaVideo, DropTarget } from 'Component';
 import { I, UtilCommon, UtilData, UtilObject, Relation, keyboard } from 'Lib';
-import { commonStore, detailStore, dbStore } from 'Store';
-import Constant from 'json/constant.json';
+import { commonStore, dbStore } from 'Store';
 
 interface Props extends I.ViewComponent {
-	recordId: string;
 	style?: any;
 };
 
@@ -24,12 +22,11 @@ const Card = observer(class Card extends React.Component<Props> {
 	};
 
 	render () {
-		const { rootId, block, recordId, getView, getRecord, onRef, style, onContext, getIdPrefix, getVisibleRelations, isInline, isCollection } = this.props;
+		const { rootId, block, record, getView, onRef, style, onContext, getIdPrefix, getVisibleRelations, isInline, isCollection } = this.props;
 		const view = getView();
 		const { cardSize, coverFit, hideIcon } = view;
 		const relations = getVisibleRelations();
 		const idPrefix = getIdPrefix();
-		const record = getRecord(recordId);
 		const cn = [ 'card', UtilData.layoutClass(record.id, record.layout), UtilData.cardSizeClass(cardSize) ];
 		const subId = dbStore.getSubId(rootId, block.id);
 		const cover = this.getCover();
@@ -48,7 +45,7 @@ const Card = observer(class Card extends React.Component<Props> {
 
 				<div className="inner">
 					{relations.map(relation => {
-						const id = Relation.cellId(idPrefix, relation.relationKey, recordId);
+						const id = Relation.cellId(idPrefix, relation.relationKey, record.id);
 						return (
 							<Cell
 								elementId={id}
@@ -65,6 +62,7 @@ const Card = observer(class Card extends React.Component<Props> {
 								tooltipX={I.MenuDirection.Left}
 								iconSize={relation.relationKey == 'name' ? 20 : 18}
 								shortUrl={true}
+								withName={true}
 							/>
 						);
 					})}
@@ -136,24 +134,23 @@ const Card = observer(class Card extends React.Component<Props> {
 	};
 
 	onDragStart (e: any) {
-		const { isCollection, recordId, onDragRecordStart } = this.props;
+		const { isCollection, record, onDragRecordStart } = this.props;
 
 		if (isCollection) {
-			onDragRecordStart(e, recordId);
+			onDragRecordStart(e, record.id);
 		};
 	};
 
 	onClick (e: any) {
 		e.preventDefault();
 
-		const { recordId, getRecord, onContext, dataset } = this.props;
+		const { record, onContext, dataset } = this.props;
 		const { selection } = dataset || {};
-		const record = getRecord(recordId);
 		const cb = {
 			0: () => { 
 				keyboard.withCommand(e) ? UtilObject.openWindow(record) : UtilObject.openPopup(record); 
 			},
-			2: () => { onContext(e, record.id); }
+			2: () => onContext(e, record.id)
 		};
 
 		const ids = selection ? selection.get(I.SelectType.Record) : [];
@@ -167,7 +164,7 @@ const Card = observer(class Card extends React.Component<Props> {
 	};
 
 	onCellClick (e: React.MouseEvent, vr: I.ViewRelation) {
-		const { onCellClick, recordId } = this.props;
+		const { onCellClick, record } = this.props;
 		const relation = dbStore.getRelationByKey(vr.relationKey);
 
 		if (!relation || ![ I.RelationType.Url, I.RelationType.Phone, I.RelationType.Email, I.RelationType.Checkbox ].includes(relation.format)) {
@@ -177,18 +174,18 @@ const Card = observer(class Card extends React.Component<Props> {
 		e.preventDefault();
 		e.stopPropagation();
 
-		onCellClick(e, relation.relationKey, recordId);
+		onCellClick(e, relation.relationKey, record.id);
 	};
 
 	getCover (): any {
-		const { recordId, getCoverObject } = this.props;
-		const cover = getCoverObject(recordId);
+		const { record, getCoverObject } = this.props;
+		const cover = getCoverObject(record.id);
 
 		return cover ? this.mediaCover(cover) : null;
 	};
 
 	mediaCover (item: any) {
-		const { coverType, coverId, coverX, coverY, coverScale } = item;
+		const { layout, coverType, coverId, coverX, coverY, coverScale } = item;
 		const cn = [ 'cover', `type${I.CoverType.Upload}` ];
 		
 		let mc = null;
@@ -206,20 +203,20 @@ const Card = observer(class Card extends React.Component<Props> {
 				/>
 			);
 		} else {
-			switch (item.type) {
-				case Constant.typeId.image: {
+			switch (layout) {
+				case I.ObjectLayout.Image: {
 					cn.push('coverImage');
-					mc = <img src={commonStore.imageUrl(item.id, 600)}/>;
+					mc = <img src={commonStore.imageUrl(item.id, 600)} onDragStart={e => e.preventDefault()} />;
 					break;
 				};
 
-				case Constant.typeId.audio: {
+				case I.ObjectLayout.Audio: {
 					cn.push('coverAudio');
 					mc = <MediaAudio playlist={[ { name: item.name, src: commonStore.fileUrl(item.id) } ]}/>;
 					break;
 				};
 
-				case Constant.typeId.video: {
+				case I.ObjectLayout.Video: {
 					cn.push('coverVideo');
 					mc = <MediaVideo src={commonStore.fileUrl(item.id)}/>;
 					break;

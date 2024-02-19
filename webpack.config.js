@@ -1,5 +1,6 @@
 const path = require('path');
 const process = require('process');
+const webpack = require('webpack');
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 module.exports = (env, argv) => {
@@ -16,11 +17,21 @@ module.exports = (env, argv) => {
 			splitChunks: false,
 		},
 		
-		entry: './src/ts/entry.tsx',
-	
+		entry: {
+			app: { 
+				import: './src/ts/entry.tsx', 
+				filename: 'main.js',
+			},
+			extension: {
+				import: './extension/entry.tsx', 
+				filename: 'extension/js/main.js',
+			},
+		},
+
 		resolve: {
 			extensions: [ '.ts', '.tsx', '.js', '.jsx' ],
 			alias: {
+				dist: path.resolve(__dirname, 'dist'),
 				protobuf: path.resolve(__dirname, 'dist/lib'),
 				json: path.resolve(__dirname, 'src/json'),
 				Lib: path.resolve(__dirname, 'src/ts/lib'),
@@ -90,6 +101,9 @@ module.exports = (env, argv) => {
 		},
 		plugins: [
 			//new BundleAnalyzerPlugin(),
+			new webpack.optimize.LimitChunkCountPlugin({
+				maxChunks: 1,
+			}),
 		],
 	};
 };

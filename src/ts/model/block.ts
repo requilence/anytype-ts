@@ -3,7 +3,7 @@ import { observable, intercept, makeObservable } from 'mobx';
 
 import BlockContentLayout from './content/layout';
 import BlockContentLink from './content/link';
-import BlockContentLatex from './content/latex';
+import BlockContentEmbed from './content/embed';
 import BlockContentRelation from './content/relation';
 import BlockContentDiv from './content/div';
 import BlockContentBookmark from './content/bookmark';
@@ -16,7 +16,7 @@ import BlockContentWidget from './content/widget';
 const ContentModel = {
 	layout:		 BlockContentLayout,
 	link:		 BlockContentLink,
-	latex:		 BlockContentLatex,
+	embed:		 BlockContentEmbed,
 	relation:	 BlockContentRelation,
 	div:		 BlockContentDiv,
 	bookmark:	 BlockContentBookmark,
@@ -58,7 +58,7 @@ class Block implements I.Block {
 
 		makeObservable(this, {
 			layout: observable,
-			type: observable,
+			//type: observable,
 			hAlign: observable,
 			vAlign: observable,
 			bgColor: observable,
@@ -79,7 +79,16 @@ class Block implements I.Block {
 	};
 
 	canHaveAlign (): boolean {
-		return this.isTextParagraph() || this.isTextQuote() || this.isTextHeader() || this.isFileImage() || this.isFileVideo() || this.isLatex() || this.isTable();
+		return (
+			this.isTextParagraph() || 
+			this.isTextQuote() || 
+			this.isTextHeader() || 
+			this.isFileImage() || 
+			this.isFileVideo() || 
+			this.isFilePdf() || 
+			this.isEmbed() || 
+			this.isTable()
+		);
 	};
 
 	canHaveColor (): boolean {
@@ -92,10 +101,6 @@ class Block implements I.Block {
 
 	canHaveMarks () {
 		return this.isText() && !this.isTextTitle() && !this.isTextDescription() && !this.isTextCode();
-	};
-
-	canHaveHistory (): boolean {
-		return this.isObjectPage() || this.isObjectHuman() || this.isObjectTask() || this.isObjectNote();
 	};
 
 	canTurn (): boolean {
@@ -120,6 +125,10 @@ class Block implements I.Block {
 
 	canCreateBlock (): boolean {
 		return !this.isSystem() && !this.isTextTitle() && !this.isTextDescription() && !this.isFeatured() && !this.isType() && !this.isTableRow();
+	};
+
+	canBecomeWidget (): boolean {
+		return this.isLink() || this.isBookmark() || this.isFile() || this.isText() || this.isDataview();
 	};
 
 	isSystem () {
@@ -158,6 +167,10 @@ class Block implements I.Block {
 		return this.isPage() && (this.layout == I.ObjectLayout.Human);
 	};
 
+	isObjectParticipant (): boolean { 
+		return this.isPage() && (this.layout == I.ObjectLayout.Participant);
+	};
+
 	isObjectTask (): boolean { 
 		return this.isPage() && (this.layout == I.ObjectLayout.Task);
 	};
@@ -174,12 +187,12 @@ class Block implements I.Block {
 		return this.isPage() && (this.layout == I.ObjectLayout.Collection);
 	};
 
-	isObjectSpace (): boolean { 
-		return this.isPage() && (this.layout == I.ObjectLayout.Space);
+	isObjectDate (): boolean { 
+		return this.isPage() && (this.layout == I.ObjectLayout.Date);
 	};
 
 	isObjectFileKind (): boolean { 
-		return this.isPage() && (this.isObjectFile() || this.isObjectImage() || this.isObjectVideo() || this.isObjectAudio());
+		return this.isPage() && (this.isObjectFile() || this.isObjectImage() || this.isObjectVideo() || this.isObjectAudio() || this.isObjectPdf());
 	};
 
 	isObjectFile (): boolean { 
@@ -196,6 +209,10 @@ class Block implements I.Block {
 
 	isObjectAudio (): boolean { 
 		return this.isPage() && (this.layout == I.ObjectLayout.Audio);
+	};
+
+	isObjectPdf (): boolean { 
+		return this.isPage() && (this.layout == I.ObjectLayout.Pdf);
 	};
 
 	isObjectType (): boolean { 
@@ -354,8 +371,32 @@ class Block implements I.Block {
 		return this.isDiv() && (this.content.type == I.DivStyle.Dot);
 	};
 
-	isLatex (): boolean {
-		return this.type == I.BlockType.Latex;
+	isEmbed (): boolean {
+		return this.type == I.BlockType.Embed;
+	};
+
+	isEmbedLatex (): boolean {
+		return this.isEmbed() && (this.content.processor == I.EmbedProcessor.Latex);
+	};
+
+	isEmbedKroki (): boolean {
+		return this.isEmbed() && (this.content.processor == I.EmbedProcessor.Kroki);
+	};
+
+	isEmbedTelegram (): boolean {
+		return this.isEmbed() && (this.content.processor == I.EmbedProcessor.Telegram);
+	};
+
+	isEmbedGithubGist (): boolean { 
+		return this.isEmbed() && (this.content.processor == I.EmbedProcessor.GithubGist);
+	};
+
+	isEmbedSketchfab (): boolean {
+		return this.isEmbed() && (this.content.processor == I.EmbedProcessor.Sketchfab);
+	};
+
+	isEmbedBilibili (): boolean {
+		return this.isEmbed() && (this.content.processor == I.EmbedProcessor.Bilibili);
 	};
 	
 	isText (): boolean {
@@ -438,16 +479,19 @@ class Block implements I.Block {
 		return l;
 	};
 
-	getTargetObjectId () {
+	getTargetObjectId (): string {
+		let ret = '';
+
 		switch (this.type) {
 			case I.BlockType.Link: {
-				return this.content.targetBlockId;
+				ret = this.content.targetBlockId;
 			};
 			default: {
-				return this.content.targetObjectId;
+				ret = this.content.targetObjectId;
 			};
 		};
 
+		return String(ret || '');
 	};
 
 };

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Frame, Title, Label, Error, Button, Header, Footer, Icon, Loader } from 'Component';
-import { I, Storage, translate, C, UtilData, UtilCommon, Action, Animation, analytics } from 'Lib';
-import { authStore } from 'Store';
+import { I, Storage, translate, C, UtilData, UtilCommon, Action, Animation, analytics, UtilRouter } from 'Lib';
+import { authStore, commonStore } from 'Store';
 import { observer } from 'mobx-react';
 import Errors from 'json/error.json';
 
@@ -60,7 +60,7 @@ const PageAuthSetup = observer(class PageAuthSetup extends React.Component<I.Pag
 
 						<div className="buttons">
 							<div className="animation">
-								<Button text={translate('commonBack')} onClick={() => UtilCommon.route('/', {})} />
+								<Button text={translate('commonBack')} onClick={() => UtilRouter.go('/', {})} />
 							</div>
 						</div>
 					</React.Fragment>
@@ -69,7 +69,7 @@ const PageAuthSetup = observer(class PageAuthSetup extends React.Component<I.Pag
 		} else {
 			content = (
 				<React.Fragment>
-					<Title className="animation" text={translate('pageAuthSetupEnteringVoid')} />
+					<Title className="animation" text={translate('pageAuthSetupEntering')} />
 					<Loader className="animation" />
 				</React.Fragment>
 			);
@@ -94,7 +94,7 @@ const PageAuthSetup = observer(class PageAuthSetup extends React.Component<I.Pag
 		const { match } = this.props;
 		const { account, walletPath } = authStore;
 
-		switch (match.params.id) {
+		switch (match?.params?.id) {
 			case 'init': {
 				this.init(); 
 				break;
@@ -138,19 +138,32 @@ const PageAuthSetup = observer(class PageAuthSetup extends React.Component<I.Pag
 					authStore.phraseSet(phrase);
 					this.select(accountId, walletPath, false);
 				} else {
-					UtilCommon.route('/auth/account-select', { replace: true });
+					UtilRouter.go('/auth/account-select', { replace: true });
 				};
 			});
 		});
 	};
 
 	select (accountId: string, walletPath: string, animate: boolean) {
-		C.AccountSelect(accountId, walletPath, (message: any) => {
+		const { networkConfig } = authStore;
+		const { mode, path } = networkConfig;
+		const spaceId = Storage.get('spaceId');
+
+		C.AccountSelect(accountId, walletPath, mode, path, (message: any) => {
 			if (this.setError(message.error) || !message.account) {
 				return;
 			};
 
-			UtilData.onAuth(message.account, { routeParam: { animate } });
+			authStore.accountSet(message.account);
+			commonStore.configSet(message.account.config, false);
+
+			if (spaceId) {
+				UtilRouter.switchSpace(spaceId);
+			} else {
+				UtilData.onInfo(message.account.info);
+				UtilData.onAuth({ routeParam: { animate } });
+			};
+
 			analytics.event('SelectAccount', { middleTime: message.middleTime });
 		});
 	};
@@ -170,7 +183,7 @@ const PageAuthSetup = observer(class PageAuthSetup extends React.Component<I.Pag
 	};
 
 	onCancel () {
-		UtilCommon.route('/auth/select', {});
+		UtilRouter.go('/auth/select', {});
 	};
 	
 });

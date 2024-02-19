@@ -11,6 +11,11 @@ const SHOW_DIMMER = [
 	'confirm',
 	'migration',
 	'pin',
+	'preview',
+	'about',
+	'inviteRequest',
+	'inviteConfirm',
+	'usecase',
 ];
 
 class PopupStore {
@@ -46,6 +51,14 @@ class PopupStore {
 
 		param.data = param.data || {};
 
+		// Auto-confirm in extension
+		if (window.isExtension && (id == 'confirm')) {
+			if (param.data.onConfirm) {
+				param.data.onConfirm();
+			};
+			return;
+		};
+
 		if (!param.preventMenuClose) {
 			menuStore.closeAll();
 		};
@@ -61,7 +74,7 @@ class PopupStore {
 		Preview.previewHide(true);
 
 		if (this.checkShowDimmer(this.popupList)) {
-			$('#navigationPanel').hide();
+			$('#navigationPanel').addClass('hide');
 		};
 	};
 
@@ -134,12 +147,12 @@ class PopupStore {
 		};
 
 		if (!this.checkShowDimmer(filtered)) {
-			$('#navigationPanel').show();
+			$('#navigationPanel').removeClass('hide');
 		};
 		
 		window.setTimeout(() => {
 			this.popupList = filtered;
-			
+
 			if (callBack) {
 				callBack();
 			};

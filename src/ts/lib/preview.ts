@@ -31,6 +31,7 @@ class Preview {
 		delay: 0,
 	};
 	delayTooltip = 0;
+	isPreviewOpen = false;
 
   /**
    * Displays a tooltip with the given text and position relative to the specified element.
@@ -119,7 +120,7 @@ class Preview {
 			node.css({ left: x, top: y }).addClass('show');
 
 			window.clearTimeout(this.timeout.delay);
-			this.timeout.delay = window.setTimeout(() => { this.delayTooltip = delay; }, 500);
+			this.timeout.delay = window.setTimeout(() => this.delayTooltip = delay, 500);
 			this.delayTooltip = 100;
 		}, this.delayTooltip);
 	};
@@ -190,6 +191,8 @@ class Preview {
 		} else {
 			commonStore.previewSet(param);
 		};
+
+		this.isPreviewOpen = true;
 	};
 
 	/**
@@ -197,8 +200,11 @@ class Preview {
 	 * @param force - hide the preview immediately, without 250ms delay
 	 */
 	previewHide (force?: boolean) {
-		const obj = $('#preview');
+		if (!this.isPreviewOpen) {
+			return;
+		};
 
+		const obj = $('#preview');
 		const cb = () => {
 			obj.hide();
 			obj.removeClass('anim top bottom withImage').css({ transform: '' });
@@ -215,6 +221,8 @@ class Preview {
 			obj.css({ opacity: 0, transform: 'translateY(0%)' });
 			this.timeout.preview = window.setTimeout(() => cb(), DELAY_PREVIEW);
 		};
+
+		this.isPreviewOpen = false;
 	};
 
 	/**
@@ -224,7 +232,7 @@ class Preview {
 	toastShow (param: I.Toast) {
 		const setTimeout = () => {
 			window.clearTimeout(this.timeout.toast);
-			this.timeout.toast = window.setTimeout(() => { this.toastHide(false); }, Constant.delay.toast);
+			this.timeout.toast = window.setTimeout(() => this.toastHide(false), Constant.delay.toast);
 		};
 
 		commonStore.toastSet(param);
@@ -233,8 +241,8 @@ class Preview {
 
 		setTimeout();
 		obj.off('mouseenter.toast mouseleave.toast');
-		obj.on('mouseenter.toast', () => { window.clearTimeout(this.timeout.toast); });
-		obj.on('mouseleave.toast', () => { setTimeout(); });
+		obj.on('mouseenter.toast', () => window.clearTimeout(this.timeout.toast));
+		obj.on('mouseleave.toast', () => setTimeout());
 	};
 
 	/**
@@ -261,7 +269,7 @@ class Preview {
 		const sidebar = $('#sidebar');
 		const isRight = sidebar.hasClass('right');
 		const { ww } = UtilCommon.getWindowDimensions();
-		const y = 16;
+		const y = 32;
 
 		let sw = 0;
 		if (commonStore.isSidebarFixed && sidebar.hasClass('active')) {

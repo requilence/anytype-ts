@@ -1,9 +1,6 @@
 const { app, shell, Menu, Tray } = require('electron');
 const { is } = require('electron-util');
 const path = require('path');
-const userPath = app.getPath('userData');
-const logPath = path.join(userPath, 'logs');
-
 const ConfigManager = require('./config.js');
 const Util = require('./util.js');
 
@@ -24,22 +21,12 @@ class MenuManager {
 		const Api = require('./api.js');
 		const WindowManager = require('./window.js');
 		const UpdateManager = require('./update.js');
-		const Locale = require('../../dist/lib/json/locale.json');
-		const lang = Util.getLang();
-		const langMenu = [];
-
-		for (const key of Util.enabledLangs()) {
-			langMenu.push({
-				label: Locale[key], type: 'checkbox', checked: key == lang,
-				click: () => Api.changeInterfaceLang(this.win, key)
-			});
-		};
 
 		const menuParam = [
 			{
 				label: 'Anytype',
 				submenu: [
-					{ label: Util.translate('electronMenuAbout'), click: () => WindowManager.createAbout() },
+					{ label: Util.translate('electronMenuAbout'), click: () => Util.send(this.win, 'popup', 'about', {}, true) },
 
 					Separator,
 
@@ -53,9 +40,7 @@ class MenuManager {
 
 					Separator,
 
-					{ label: Util.translate('electronMenuSpaceSettings'), click: () => this.openSettings('spaceIndex', { data: { isSpace: true }, className: 'isSpace' }) },
-					{ label: Util.translate('electronMenuAccountSettings'), click: () => this.openSettings('') },
-					{ label: Util.translate('electronMenuLanguage'), submenu: langMenu },
+					{ label: Util.translate('commonSettings'), submenu: this.menuSettings() },
 
 					Separator,
 
@@ -65,8 +50,8 @@ class MenuManager {
 			{
 				role: 'fileMenu', label: Util.translate('electronMenuFile'),
 				submenu: [
-					{ label: Util.translate('electronMenuDirectory'), click: () => { shell.openPath(userPath); } },
-					{ label: Util.translate('electronMenuLogs'), click: () => { shell.openPath(logPath); } },
+					{ label: Util.translate('electronMenuDirectory'), click: () => shell.openPath(Util.userPath()) },
+					{ label: Util.translate('electronMenuLogs'), click: () => shell.openPath(Util.logPath()) },
 
 					Separator,
 					{ label: Util.translate('electronMenuImport'), click: () => this.openSettings('importIndex', { data: { isSpace: true }, className: 'isSpace' }) },
@@ -75,15 +60,9 @@ class MenuManager {
 
 					Separator,
 
-					{ label: Util.translate('electronMenuDebugSpace'), click: () => { Util.send(this.win, 'command', 'debugSpace'); } },
-					{ label: Util.translate('electronMenuDebugObject'), click: () => { this.win.show(); Util.send(this.win, 'command', 'debugTree'); } },
-					{ 
-						label: Util.translate('electronMenuDebugProcess'), 
-						click: () => {
-							Api.exit(this.win, 'SIGUSR1', true);
-							shell.openPath(path.join(Util.dataPath(), Api.account.id, 'logs'));
-						}
-					},
+					{ label: Util.translate('electronMenuDebugSpace'), click: () => Util.send(this.win, 'commandGlobal', 'debugSpace') },
+					{ label: Util.translate('electronMenuDebugObject'), click: () => Util.send(this.win, 'commandGlobal', 'debugTree') },
+					{ label: Util.translate('electronMenuDebugProcess'), click: () => Util.send(this.win, 'commandGlobal', 'debugProcess') },
 
 					Separator,
 
@@ -140,7 +119,6 @@ class MenuManager {
 				role: 'windowMenu', label: Util.translate('electronMenuWindow'),
 				submenu: [
 					{ label: Util.translate('electronMenuNewWindow'), accelerator: 'CmdOrCtrl+Shift+N', click: () => WindowManager.createMain({ isChild: true }) },
-					{ label: Util.translate('electronMenuNewObject'), accelerator: 'CmdOrCtrl+Alt+N', click: () => WindowManager.createMain({ route: '/main/create', isChild: true }) },
 
 					Separator,
 
@@ -149,7 +127,7 @@ class MenuManager {
 					{ label: Util.translate('electronMenuZoomOut'), accelerator: 'CmdOrCtrl+-', click: () => Api.setZoom(this.win, this.win.webContents.getZoomLevel() - 1) },
 					{ label: Util.translate('electronMenuZoomDefault'), accelerator: 'CmdOrCtrl+0', click: () => Api.setZoom(this.win, 0) },
 					{
-						label: Util.translate('electronMenuFullscreen'), accelerator: 'CmdOrCtrl+Alt+F', type: 'checkbox', checked: this.win.isFullScreen(),
+						label: Util.translate('electronMenuFullscreen'), accelerator: (is.macos ? 'Cmd+Ctrl+F' : 'Ctrl+Alt+F'), type: 'checkbox', checked: this.win.isFullScreen(),
 						click: () => this.win.setFullScreen(!this.win.isFullScreen())
 					},
 					{ label: Util.translate('electronMenuReload'), accelerator: 'CmdOrCtrl+R', click: () => this.win.reload() }
@@ -159,7 +137,7 @@ class MenuManager {
 				label: Util.translate('electronMenuHelp'),
 				submenu: [
 					{
-						label: Util.translate('electronMenuReleaseNotes') + ` (${app.getVersion()})`,
+						label: `${Util.translate('electronMenuReleaseNotes')} (${app.getVersion()})`,
 						click: () => Util.send(this.win, 'popup', 'help', { preventResize: true, data: { document: 'whatsNew' } })
 					},
 					{
@@ -169,6 +147,7 @@ class MenuManager {
 
 					Separator,
 
+					{ label: Util.translate('electronMenuGallery'), click: () => Util.send(this.win, 'commandGlobal', 'gallery') },
 					{ label: Util.translate('electronMenuCommunity'), click: () => Util.send(this.win, 'commandGlobal', 'community') },
 					{ label: Util.translate('electronMenuTutorial'), click: () => Util.send(this.win, 'commandGlobal', 'tutorial') },
 					{ label: Util.translate('electronMenuContact'), click: () => Util.send(this.win, 'commandGlobal', 'contact') },
@@ -215,7 +194,7 @@ class MenuManager {
 				label: Util.translate('electronMenuDebug'),
 				submenu: [
 					{ label: Util.translate('electronMenuFlags'), submenu: flagMenu },
-					{ label: Util.translate('electronMenuDevTools'), accelerator: 'Alt+CmdOrCtrl+I', click: () => this.win.webContents.openDevTools() },
+					{ label: Util.translate('electronMenuDevTools'), accelerator: 'Alt+CmdOrCtrl+I', click: () => this.win.toggleDevTools() },
 				]
 			});
 		//};
@@ -251,7 +230,7 @@ class MenuManager {
 
 				{ label: 'Export templates', click: () => Util.send(this.win, 'commandGlobal', 'exportTemplates') },
 				{ label: 'Export objects', click: () => Util.send(this.win, 'commandGlobal', 'exportObjects') },
-				{ label: 'Export localstore', click: () => { Util.send(this.win, 'commandGlobal', 'exportLocalstore'); } },
+				{ label: 'Export localstore', click: () => Util.send(this.win, 'commandGlobal', 'exportLocalstore') },
 
 				Separator,
 
@@ -272,64 +251,117 @@ class MenuManager {
 	};
 
 	initTray () {
+		const { config } = ConfigManager;
 		const Api = require('./api.js');
 
-		const show = () => {
-			if (this.win) {
-				this.win.show();
-			};
-		};
+		this.destroy();
 
-		const hide = () => {
-			if (this.win) {
-				this.win.hide();
-			};
-		};
-
-		if (this.tray) {
-			this.tray.destroy();
+		if (config.hideTray) {
+			return;
 		};
 
 		this.tray = new Tray (this.getTrayIcon());
 		this.tray.setToolTip('Anytype');
 		this.tray.setContextMenu(Menu.buildFromTemplate([
-			{ label: Util.translate('electronMenuOpen'), click: () => show() },
+			{ label: Util.translate('electronMenuOpen'), click: () => this.winShow() },
 
 			Separator,
 
-			{ label: Util.translate('electronMenuCheckUpdates'), click: () => { show(); Api.updateCheck(this.win); } },
-
-			Separator,
-
-			{ label: Util.translate('electronMenuSpaceSettings'), click: () => { show(); this.openSettings('spaceIndex', { data: { isSpace: true }, className: 'isSpace' }); } },
-			{ label: Util.translate('electronMenuAccountSettings'), click: () => { show(); this.openSettings(''); } },
-
-			Separator,
-
-			{ label: Util.translate('electronMenuImport'), click: () => { show(); this.openSettings('importIndex', { data: { isSpace: true }, className: 'isSpace' }); } },
-			{ label: Util.translate('electronMenuExport'), click: () => { show(); this.openSettings('exportIndex', { data: { isSpace: true }, className: 'isSpace' }); } },
+			{ label: Util.translate('electronMenuCheckUpdates'), click: () => { this.winShow(); Api.updateCheck(this.win); } },
+			{ label: Util.translate('commonSettings'), submenu: this.menuSettings() },
 			
 			Separator,
 
-			{ label: Util.translate('electronMenuNewObject'), accelerator: 'CmdOrCtrl+N', click: () => { show(); Util.send(this.win, 'commandGlobal', 'create'); } },
-			{ label: Util.translate('electronMenuSearchObject'), click: () => { show(); Util.send(this.win, 'popup', 'search', {}, true); } },
-			
-			Separator,
-
-			{ label: Util.translate('electronMenuDebugSpace'), click: () => { show(); Util.send(this.win, 'commandGlobal', 'debugSpace'); } },
-			{ label: Util.translate('electronMenuDebugTree'), click: () => { show(); Util.send(this.win, 'commandGlobal', 'debugTree'); } },
-
-			Separator,
-
-			{ label: Util.translate('electronMenuQuit'), click: () => { hide(); Api.exit(this.win, '', false); } },
+			{ label: Util.translate('electronMenuQuit'), click: () => { this.winHide(); Api.exit(this.win, '', false); } },
 		]));
 
-		// Force on top and focus because in some case Electron fail with show()
+		// Force on top and focus because in some case Electron fail with this.winShow()
 		this.tray.on('double-click', () => {
 			this.win.setAlwaysOnTop(true);
-			this.win.show();
+			this.winShow();
 			this.win.setAlwaysOnTop(false);
 		});
+	};
+
+	winShow () {
+		if (this.win) {
+			this.win.show();
+		};
+	};
+
+	winHide () {
+		if (this.win) {
+			this.win.hide();
+		};
+	};
+
+	menuSettings () {
+		const { config } = ConfigManager;
+		const Api = require('./api.js');
+		const Locale = require('../../dist/lib/json/locale.json');
+		const lang = Util.getLang();
+		const langMenu = [];
+
+		for (const key of Util.enabledLangs()) {
+			langMenu.push({
+				label: Locale[key], type: 'checkbox', checked: key == lang,
+				click: () => Util.send(this.win, 'commandGlobal', 'interfaceLang', key)
+			});
+		};
+
+		return [
+			{ 
+				label: Util.translate('electronMenuShowTray'), type: 'checkbox', checked: !config.hideTray, click: () => { 
+					Api.setConfig(this.win, { hideTray: !config.hideTray });
+					this.initTray();
+				} 
+			},
+
+			(is.windows || is.linux) ? { 
+				label: Util.translate('electronMenuShowMenu'), type: 'checkbox', checked: !config.hideMenuBar, click: () => { 
+					Api.setMenuBarVisibility(this.win, !config.hideMenuBar);
+					this.initTray();
+				} 
+			} : null,
+
+			Separator,
+
+			{ 
+				label: Util.translate('electronMenuSpaceSettings'), click: () => { 
+					this.winShow(); 
+					this.openSettings('spaceIndex', { data: { isSpace: true }, className: 'isSpace' }); 
+				}
+			},
+			{ 
+				label: Util.translate('electronMenuAccountSettings'), click: () => { 
+					this.winShow(); 
+					this.openSettings(''); 
+				}
+			},
+			{ 
+				label: Util.translate('electronMenuImport'), click: () => { 
+					this.winShow(); 
+					this.openSettings('importIndex', { data: { isSpace: true }, className: 'isSpace' }); 
+				} 
+			},
+			{ 
+				label: Util.translate('electronMenuExport'), click: () => { 
+					this.winShow(); 
+					this.openSettings('exportIndex', { data: { isSpace: true }, className: 'isSpace' }); 
+				} 
+			},
+
+			{ label: Util.translate('electronMenuLanguage'), submenu: langMenu },
+			
+			Separator,
+
+			{ 
+				label: Util.translate('commonNewObject'), accelerator: 'CmdOrCtrl+N', click: () => { 
+					this.winShow();
+					Util.send(this.win, 'commandGlobal', 'create'); 
+				} 
+			},
+		].filter(it => it);
 	};
 
 	openSettings (page, param) {
@@ -363,6 +395,13 @@ class MenuManager {
 			icon = `iconTrayTemplate.png`;
 		};
 		return path.join(Util.imagePath(), icon);
+	};
+
+	destroy () {
+		if (this.tray) {
+			this.tray.destroy();
+			this.tray = null;
+		};
 	};
 
 };

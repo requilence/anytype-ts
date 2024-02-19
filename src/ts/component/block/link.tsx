@@ -35,7 +35,7 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 		const readonly = this.props.readonly || !blockStore.isAllowed(object.restrictions, [ I.RestrictionObject.Details ]);
 		const { description, cardStyle, relations } = content;
 		const { size, iconSize } = this.getIconSize();
-		const type = dbStore.getType(object.type);
+		const type = dbStore.getTypeById(object.type);
 		const cn = [ 'focusable', 'c' + block.id, 'resizable' ];
 
 		const canDescription = ![ I.ObjectLayout.Note ].includes(object.layout);
@@ -88,6 +88,8 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 			let archive = null;
 			let icon = null;
 			let div = null;
+			let onCardClick = null;
+			let onNameClick = null;
 
 			if (canDescription) {
 				if (description == I.LinkDescription.Added) {
@@ -99,7 +101,7 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 			};
 
 			if (isArchived) {
-				archive = <div className="tagItem isTag archive">{translate('blockLinkArchived')}</div>;
+				archive = <div className="tagItem isMultiSelect archive">{translate('blockLinkArchived')}</div>;
 			};
 
 			if (cardStyle == I.LinkCardStyle.Text) {
@@ -108,6 +110,9 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 						<div className="inner" />
 					</div>
 				);
+				onNameClick = this.onClick;
+			} else {
+				onCardClick = this.onClick;
 			};
 
 			if (withIcon) {
@@ -120,7 +125,8 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 						canEdit={!readonly && !isArchived} 
 						onSelect={this.onSelect} 
 						onUpload={this.onUpload} 
-						onCheckbox={this.onCheckbox} 
+						onCheckbox={this.onCheckbox}
+						noClick={true}
 					/>
 				);
 			};
@@ -128,13 +134,14 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 			let n = 1;
 			if (descr) n++;
 			if (withType && type) n++;
+
 			cnc.push('c' + n);
 
 			element = (
-				<div className={cnc.join(' ')} onMouseDown={this.onClick}>
+				<div className={cnc.join(' ')} onClick={onCardClick}>
 					<div id="sides" className={cns.join(' ')}>
 						<div key="sideLeft" className={cnl.join(' ')}>
-							<div className="relationItem cardName">
+							<div className="relationItem cardName" onClick={onNameClick}>
 								{icon}
 								<ObjectName object={object} onMouseEnter={this.onMouseEnter} onMouseLeave={this.onMouseLeave} />
 								{archive}
@@ -240,12 +247,11 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 	};
 
 	onFocus () {
-		const { block } = this.props;
-		focus.set(block.id, { from: 0, to: 0 });
+		focus.set(this.props.block.id, { from: 0, to: 0 });
 	};
 	
 	onClick (e: any) {
-		if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.button) {
+		if (e.button) {
 			return;
 		};
 
@@ -266,15 +272,11 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 	};
 	
 	onSelect (icon: string) {
-		const { block } = this.props;
-
-		UtilObject.setIcon(block.content.targetBlockId, icon, '');
+		UtilObject.setIcon(this.props.block.content.targetBlockId, icon, '');
 	};
 
-	onUpload (hash: string) {
-		const { block } = this.props;
-
-		UtilObject.setIcon(block.content.targetBlockId, '', hash);
+	onUpload (objectId: string) {
+		UtilObject.setIcon(this.props.block.content.targetBlockId, '', objectId);
 	};
 
 	onCheckbox () {
@@ -310,6 +312,7 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 			object,
 			target: targetBlockId, 
 			noUnlink: true,
+			noEdit: true,
 			passThrough: true,
 		});
 	};
@@ -360,7 +363,7 @@ const BlockLink = observer(class BlockLink extends React.Component<I.BlockCompon
 			const mw = getWrapperWidth();
 
 			icon.length ? card.addClass('withIcon') : card.removeClass('withIcon');
-			rect.width <= mw / 2 ? card.addClass('vertical') : card.removeClass('vertical');
+			rect.width <= mw / 2 ? card.addClass('isVertical') : card.removeClass('isVertical');
 		});
 	};
 

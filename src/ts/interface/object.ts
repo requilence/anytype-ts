@@ -13,12 +13,13 @@ export enum ObjectLayout {
 	Bookmark	 = 11,
 	OptionList	 = 12,
 	Option		 = 13,
-	Collection = 14,
+	Collection	 = 14,
 	Audio		 = 15,
 	Video		 = 16,
 	Date		 = 17,
-	
-	Database	 = 20,
+	SpaceView	 = 18,
+	Participant	 = 19,
+	Pdf			 = 20,
 
 	Empty		 = 100,
 	Navigation	 = 101,
@@ -33,7 +34,7 @@ export enum RelationType {
 	LongText	 = 0, 
 	ShortText	 = 1, 
 	Number		 = 2, 
-	Status		 = 3, 
+	Select		 = 3, 
 	Date		 = 4, 
 	File		 = 5,
 	Checkbox	 = 6, 
@@ -41,7 +42,7 @@ export enum RelationType {
 	Email		 = 8,
 	Phone		 = 9,
 	Icon		 = 10,
-	Tag			 = 11,
+	MultiSelect	 = 11,
 	Object		 = 100,
 	Relations	 = 101,
 };
@@ -54,13 +55,20 @@ export enum RelationScope {
 	Library				 = 4,
 };
 
-export enum OptionScope {
-    Local	 = 0,
-	Relation = 1,
-};
-
 export enum ObjectFlag {
 	DeleteEmpty		 = 0,
 	SelectType		 = 1,
     SelectTemplate	 = 2,
+};
+
+export enum ObjectOrigin {
+	None			 = 0,
+	Clipboard		 = 1,
+	DragAndDrop		 = 2,
+	Import			 = 3,
+	Webclipper		 = 4,
+	SharingExtension = 5,
+	Usecase			 = 6,
+	Builtin			 = 7,
+	Bookmark		 = 8,
 };

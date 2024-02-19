@@ -76,7 +76,7 @@ class Header extends React.Component<Props> {
 	};
 
 	onSearch () {
-		keyboard.onSearchPopup();
+		keyboard.onSearchPopup('Header');
 	};
 
 	onNavigation () {
@@ -112,11 +112,11 @@ class Header extends React.Component<Props> {
 		}, param);
 
 		if (!isPopup) {
-			menuParam.fixedY = element.offset().top + element.height() - st;
+			menuParam.fixedY = element.offset().top + element.height() - st + 4;
 			menuParam.classNameWrap = 'fixed fromHeader';
 		};
 
-		menuStore.closeAllForced(null, () => { menuStore.open(id, menuParam); });
+		menuStore.closeAllForced(null, () => menuStore.open(id, menuParam));
 	};
 
 	getContainer () {

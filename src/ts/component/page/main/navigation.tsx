@@ -108,7 +108,7 @@ const PageMainNavigation = observer(class PageMainNavigation extends React.Compo
 			const { name, description, layout, snippet, coverType, coverId, coverX, coverY, coverScale } = item;
 
 			return (
-				<div id={'item-' + item.id} className="selected">
+				<div id={'item-' + item.id} className="item selected">
 					<IconObject object={item} forceLetter={true} size={48} />
 					<ObjectName object={item} />
 					<ObjectDescription object={item} />
@@ -116,8 +116,8 @@ const PageMainNavigation = observer(class PageMainNavigation extends React.Compo
 					{coverId && coverType ? <Cover type={coverType} id={coverId} image={coverId} className={coverId} x={coverX} y={coverY} scale={coverScale} withScale={true} /> : ''}
 				
 					<div className="buttons">
-						<Button text={translate('popupNavigationOpen')} className="c36" onClick={(e: any) => { this.onConfirm(e, item); }} />
-						{isPopup ? <Button text={translate('popupNavigationCancel')} className="c36" color="blank" onClick={() => { popupStore.close('page'); }} /> : ''}
+						<Button text={translate('popupNavigationOpen')} className="c36" onClick={e => this.onConfirm(e, item)} />
+						{isPopup ? <Button text={translate('popupNavigationCancel')} className="c36" color="blank" onClick={() => popupStore.close('page')} /> : ''}
 					</div>
 				</div>
 			);
@@ -302,7 +302,7 @@ const PageMainNavigation = observer(class PageMainNavigation extends React.Compo
 		keyboard.disableMouse(true);
 
 		keyboard.shortcut('arrowup, arrowdown', e, (pressed: string) => {
-			const dir = pressed.match(Key.up) ? -1 : 1;
+			const dir = pressed == 'arrowup' ? -1 : 1;
 
 			this.n += dir;
 			if (this.n < 0) {
@@ -315,7 +315,7 @@ const PageMainNavigation = observer(class PageMainNavigation extends React.Compo
 		});
 
 		keyboard.shortcut('arrowleft, arrowright', e, (pressed: string) => {
-			const dir = pressed.match(Key.left) ? -1 : 1;
+			const dir = pressed == 'arrowleft' ? -1 : 1;
 
 			this.panel += dir;
 
@@ -344,16 +344,10 @@ const PageMainNavigation = observer(class PageMainNavigation extends React.Compo
 			this.setActive();
 		});
 
-		keyboard.shortcut('enter, space', e, (pressed: string) => {
+		keyboard.shortcut('enter, space', e, () => {
 			const item = items[this.n];
-			if (!item) {
-				return;
-			};
-
-			if (this.panel == Panel.Center) {
-				this.onConfirm(e, item);
-			} else {
-				this.loadPage(item.id);
+			if (item) {
+				UtilObject.openAuto({ ...item, layout: (this.panel == Panel.Center) ? item.layout : I.ObjectLayout.Navigation });
 			};
 		});
 	};
@@ -426,13 +420,11 @@ const PageMainNavigation = observer(class PageMainNavigation extends React.Compo
 				return;
 			};
 
-			let pagesIn = message.object.links.inbound.map(this.getPage);
-			let pagesOut = message.object.links.outbound.map(this.getPage);
-
-			pagesIn = pagesIn.filter(this.filterMapper);
-			pagesOut = pagesOut.filter(this.filterMapper);
+			const pagesIn = message.object.links.inbound.map(this.getPage).filter(this.filterMapper);
+			const pagesOut = message.object.links.outbound.map(this.getPage).filter(this.filterMapper);
 
 			this.panel = Panel.Center;
+
 			this.setState({ 
 				loading: false,
 				info: this.getPage(message.object.info),
@@ -482,7 +474,7 @@ const PageMainNavigation = observer(class PageMainNavigation extends React.Compo
 
 		let root = rootId ? rootId : match.params.id;
 		if (root == I.HomePredefinedId.Graph) {
-			root = UtilObject.lastOpened()?.id;
+			root = UtilObject.getLastOpened()?.id;
 		};
 		return root;
 	};

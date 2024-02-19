@@ -1,7 +1,7 @@
 import * as React from 'react';
 import $ from 'jquery';
 import { Icon, IconObject, Switch, Select } from 'Component';
-import { I } from 'Lib';
+import { I, UtilCommon } from 'Lib';
 
 class MenuItemVertical extends React.Component<I.MenuItem> {
 
@@ -22,7 +22,7 @@ class MenuItemVertical extends React.Component<I.MenuItem> {
 			cn.push(className);
 		};
 		if (color) {
-			cn.push(color + ' withColor');
+			cn.push(`textColor textColor-${color}`);
 		};
 		if (withArrow) {
 			cn.push('withArrow');
@@ -108,7 +108,7 @@ class MenuItemVertical extends React.Component<I.MenuItem> {
 				additional = (
 					<React.Fragment>
 						{typeof caption === 'string' ? (
-							<div className="caption" dangerouslySetInnerHTML={{ __html: caption }} />
+							<div className="caption" dangerouslySetInnerHTML={{ __html: UtilCommon.sanitize(caption) }} />
 						) : (
 							<div className="caption">{caption}</div>
 						)}

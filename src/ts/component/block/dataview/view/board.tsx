@@ -1,11 +1,10 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
-import { observable } from 'mobx';
 import arrayMove from 'array-move';
 import $ from 'jquery';
 import raf from 'raf';
-import { I, C, UtilCommon, UtilData, UtilObject, Dataview, analytics, keyboard, Relation, translate } from 'Lib';
-import { dbStore, detailStore, popupStore, menuStore, commonStore, blockStore } from 'Store';
+import { I, C, UtilCommon, Dataview, keyboard, Relation, translate } from 'Lib';
+import { dbStore, detailStore, commonStore, blockStore } from 'Store';
 import Empty from '../empty';
 import Column from './board/column';
 import Constant from 'json/constant.json';
@@ -28,14 +27,13 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 
 	constructor (props: I.ViewComponent) {
 		super(props);
-		
-		this.onView = this.onView.bind(this);
+
 		this.onDragStartColumn = this.onDragStartColumn.bind(this);
 		this.onDragStartCard = this.onDragStartCard.bind(this);
 	};
 
 	render () {
-		const { rootId, block, getView, className } = this.props;
+		const { rootId, block, getView, className, onViewSettings } = this.props;
 		const view = getView();
 		const groups = this.getGroups(false);
 		const relation = dbStore.getRelationByKey(view.groupRelationKey);
@@ -43,13 +41,13 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 
 		if (!relation || !relation.isInstalled) {
 			return (
-				<Empty 
+				<Empty
 					{...this.props}
 					title={translate('blockDataviewBoardRelationDeletedTitle')}
 					description={translate('blockDataviewBoardRelationDeletedDescription')}
 					button={translate('blockDataviewBoardOpenViewMenu')}
 					className="withHead"
-					onClick={this.onView}
+					onClick={onViewSettings}
 				/>
 			);
 		};
@@ -110,7 +108,7 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 		this.unbind();
 
 		const node = $(this.node);
-		node.find('#scroll').on('scroll', (e: any) => { this.onScrollView(); });
+		node.find('#scroll').on('scroll', () => this.onScrollView());
 	};
 
 	unbind () {
@@ -144,7 +142,7 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 			el.groups.forEach(it => groupOrder[it.groupId] = it);
 		};
 
-		C.ObjectGroupsSubscribe(subId, view.groupRelationKey, view.filters, object.setOf || [], isCollection ? object.id : '', (message: any) => {
+		C.ObjectGroupsSubscribe(commonStore.space, subId, view.groupRelationKey, view.filters, object.setOf || [], isCollection ? object.id : '', (message: any) => {
 			if (message.error.code) {
 				return;
 			};
@@ -155,7 +153,7 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 				let option: any = null;
 
 				switch (relation.format) {
-					case I.RelationType.Tag:
+					case I.RelationType.MultiSelect:
 						value = Relation.getArrayValue(value);
 						if (value.length) {
 							option = detailStore.get(Constant.subId.option, value[0]);
@@ -163,7 +161,7 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 						};
 						break;
 
-					case I.RelationType.Status:
+					case I.RelationType.Select:
 						option = detailStore.get(Constant.subId.option, value);
 						bgColor = option?.color;
 						break;
@@ -269,7 +267,7 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 		clone.attr({ id: '' }).addClass('isClone').css({ zIndex: 10000, position: 'fixed', left: -10000, top: -10000 });
 		view.append(clone);
 
-		$(document).off('dragover').on('dragover', (e: any) => { e.preventDefault(); });
+		$(document).off('dragover').on('dragover', e => e.preventDefault());
 		$(window).off('dragend.board drag.board');
 		$('body').addClass('grab');
 
@@ -312,8 +310,8 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 		this.initCacheColumn();
 		this.isDraggingColumn = true;
 
-		win.on('drag.board', (e: any) => { this.onDragMoveColumn(e, groupId); });
-		win.on('dragend.board', (e: any) => { this.onDragEndColumn(e, groupId); });
+		win.on('drag.board', e => this.onDragMoveColumn(e, groupId));
+		win.on('dragend.board', e => this.onDragEndColumn(e, groupId));
 	};
 
 	onDragMoveColumn (e: any, groupId: any) {
@@ -394,8 +392,8 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 		this.initCacheCard();
 		this.isDraggingCard = true;
 
-		win.on('drag.board', (e: any) => { this.onDragMoveCard(e, record); });
-		win.on('dragend.board', (e: any) => { this.onDragEndCard(e, record); });
+		win.on('drag.board', e => this.onDragMoveCard(e, record));
+		win.on('dragend.board', e => this.onDragEndCard(e, record));
 	};
 
 	onDragMoveCard (e: any, record: any) {
@@ -440,6 +438,10 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 
 	onDragEndCard (e: any, record: any) {
 		const current = this.cache[record.id];
+
+		if (!current) {
+			return;
+		};
 
 		this.onDragEndCommon(e);
 		this.cache = {};
@@ -561,33 +563,6 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 		};
 	};
 
-	onView (e: any) {
-		e.stopPropagation();
-
-		const { rootId, block, getView, loadData, getSources, isInline, isCollection, getTarget } = this.props;
-		const view = getView();
-		const allowed = blockStore.checkFlags(rootId, block.id, [ I.RestrictionDataview.View ]);
-
-		menuStore.open('dataviewViewEdit', { 
-			element: `#dataviewEmpty-${block.id} .button`,
-			horizontal: I.MenuDirection.Center,
-			offsetY: 10,
-			data: {
-				rootId,
-				blockId: block.id,
-				readonly: !allowed,
-				view: observable.box(view),
-				isInline,
-				isCollection,
-				getView,
-				loadData,
-				getSources,
-				getTarget,
-				onSave: () => { this.forceUpdate(); },
-			}
-		});
-	};
-
 	resize () {
 		const { rootId, block, isPopup, isInline } = this.props;
 		const element = blockStore.getMapElement(rootId, block.id);
@@ -606,16 +581,15 @@ const ViewBoard = observer(class ViewBoard extends React.Component<I.ViewCompone
 			const margin = width >= maxWidth ? (cw - maxWidth) / 2 : 0;
 
 			scroll.css({ width: cw, marginLeft: -margin / 2, paddingLeft: margin / 2 });
-			view.css({ width: width < maxWidth ? maxWidth : width + PADDING + margin / 2 + 4 });
-		} else {
-			if (parent && parent.isPage() || parent.isLayoutDiv()) {
-				const wrapper = $('#editorWrapper');
-				const ww = wrapper.width();
-				const margin = (cw - ww) / 2;
+			view.css({ width: width < maxWidth ? maxWidth : width + margin / 2 + size.margin + 4 });
+		} else 
+		if (parent && (parent.isPage() || parent.isLayoutDiv())) {
+			const wrapper = $('#editorWrapper');
+			const ww = wrapper.width();
+			const margin = (cw - ww) / 2;
 
-				scroll.css({ width: cw, marginLeft: -margin, paddingLeft: margin });
-				view.css({ width: width + margin + 2 });
-			};
+			scroll.css({ width: cw, marginLeft: -margin, paddingLeft: margin });
+			view.css({ width: width + margin + 2 });
 		};
 	};
 

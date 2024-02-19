@@ -2,10 +2,11 @@ import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { AutoSizer, CellMeasurer, InfiniteLoader, List, CellMeasurerCache } from 'react-virtualized';
-import { Icon, Tag, Filter } from 'Component';
+import { Icon, Tag, Filter, DragBox } from 'Component';
 import { I, C, UtilCommon, UtilMenu, keyboard, Relation, translate } from 'Lib';
-import { menuStore, dbStore } from 'Store';
+import { menuStore, dbStore, commonStore } from 'Store';
 import Constant from 'json/constant.json';
+import arrayMove from 'array-move';
 
 const HEIGHT = 28;
 const LIMIT = 40;
@@ -57,7 +58,13 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 			let content = null;
 			if (item.id == 'add') {
 				content = (
-					<div id="item-add" className="item add" onClick={(e: any) => { this.onClick(e, item); }} style={param.style} onMouseEnter={(e: any) => { this.onOver(e, item); }}>
+					<div 
+						id="item-add" 
+						className="item add" 
+						style={param.style}
+						onClick={e => this.onClick(e, item)} 
+						onMouseEnter={e => this.onOver(e, item)}
+					>
 						<Icon className="plus" />
 						<div className="name">{item.name}</div>
 					</div>
@@ -67,12 +74,12 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 				content = (<div className="sectionName" style={param.style}>{item.name}</div>);
 			} else {
 				content = (
-					<div id={'item-' + item.id} className="item" style={param.style} onMouseEnter={(e: any) => { this.onOver(e, item); }}>
-						<div className="clickable" onClick={(e: any) => { this.onClick(e, item); }}>
+					<div id={'item-' + item.id} className="item" style={param.style} onMouseEnter={e => this.onOver(e, item)}>
+						<div className="clickable" onClick={e => this.onClick(e, item)}>
 							<Tag text={item.name} color={item.color} className={Relation.selectClassName(relation.format)} />
 						</div>
 						<div className="buttons">
-							<Icon className="more" onClick={(e: any) => { this.onEdit(e, item); }} />
+							<Icon className="more" onClick={e => this.onEdit(e, item)} />
 						</div>
 						{active ? <Icon className="chk" /> : ''}
 					</div>
@@ -95,11 +102,14 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 		return (
 			<div className={[ 'wrap', (noFilter ? 'noFilter' : '') ].join(' ')}>
 				{!noFilter ? (
-					<Filter 
+					<Filter
+						className="outlined"
+						icon="search"
 						ref={ref => this.refFilter = ref} 
 						placeholderFocus={placeholder} 
 						value={filter}
 						onChange={this.onFilterChange} 
+						focusOnMount={true}
 					/>
 				) : ''}
 
@@ -142,7 +152,6 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 		const items = this.getItems();
 
 		this._isMounted = true;
-		this.focus();
 		this.rebind();
 		this.resize();
 
@@ -174,18 +183,10 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 		this.unbind();
 	};
 
-	focus () {
-		window.setTimeout(() => { 
-			if (this.refFilter) {
-				this.refFilter.focus(); 
-			};
-		}, 15);
-	};
-
 	rebind () {
 		this.unbind();
 		$(window).on('keydown.menu', e => this.onKeyDown(e));
-		$(`#${this.props.getId()}`).on('click', () => { menuStore.close('dataviewOptionEdit'); });
+		$(`#${this.props.getId()}`).on('click', () => menuStore.close('dataviewOptionEdit'));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 
@@ -227,12 +228,22 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 		const { param } = this.props;
 		const { data } = param;
 		const { cellRef } = data;
+		const value = Relation.getArrayValue(data.value);
+		const id = item.id;
 
 		if (cellRef) {
 			cellRef.clear();
 		};
 
-		item.id == 'add' ? this.onOptionAdd() : this.onValueAdd(item.id);
+		if (id == 'add') {
+			this.onOptionAdd();
+		} else
+		if (value.includes(id)) {
+			this.onValueRemove(id);
+		} else {
+			this.onValueAdd(id);
+		};
+
 		this.onFilterChange('');
 	};
 
@@ -242,6 +253,7 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 		const { onChange, maxCount } = data;
 
 		let value = Relation.getArrayValue(data.value);
+
 		value.push(id);
 		value = UtilCommon.arrayUnique(value);
 
@@ -253,6 +265,18 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 			};
 		};
 
+		menuStore.updateData(this.props.id, { value });
+		onChange(value);
+	};
+
+	onValueRemove (id: string) {
+		const { param } = this.props;
+		const { data } = param;
+		const { onChange } = data;
+		const value = Relation.getArrayValue(data.value);
+		const idx = value.indexOf(id);
+
+		value.splice(idx, 1);
 		menuStore.updateData(this.props.id, { value });
 		onChange(value);
 	};
@@ -281,7 +305,7 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 			relationKey: relation.relationKey,
 			name: option.name,
 			relationOptionColor: option.color,
-		}, (message: any) => {
+		}, commonStore.space, (message: any) => {
 			if (message.error.code) {
 				return;
 			};
@@ -292,7 +316,7 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 			this.onFilterChange('');
 			this.onValueAdd(message.objectId);
 
-			window.setTimeout(() => { this.resize(); }, 50);
+			window.setTimeout(() => this.resize(), 50);
 		});
 	};
 	
@@ -327,16 +351,28 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 		const { data } = param;
 		const { canAdd, filterMapper } = data;
 		const relation = data.relation.get();
-		const isStatus = relation.format == I.RelationType.Status;
+		const isSelect = relation.format == I.RelationType.Select;
 		const value = Relation.getArrayValue(data.value);
+		const ret = [];
 
 		let items = Relation.getOptions(dbStore.getRecords(Constant.subId.option, '')).filter(it => it.relationKey == relation.relationKey);
-		const ret = [];
 		let check = [];
+
+		items.filter(it => !it._empty_ && !it.isArchived && !it.isDeleted);
 
 		if (filterMapper) {
 			items = items.filter(filterMapper);
 		};
+
+		items.sort((c1, c2) => {
+			const isSelected1 = value.includes(c1.id);
+			const isSelected2 = value.includes(c2.id);
+
+			if (isSelected1 && !isSelected2) return -1;
+			if (!isSelected1 && isSelected2) return 1;
+
+			return 0;
+		});
 
 		if (data.filter) {
 			const filter = new RegExp(UtilCommon.regexEscape(data.filter), 'gi');
@@ -345,15 +381,12 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 			items = items.filter(it => it.name.match(filter));
 
 			if (canAdd && !check.length) {
-				let addItemNameKey = 'menuDataviewOptionListCreateOption';
-				if (isStatus) {
-					addItemNameKey = 'menuDataviewOptionListSetStatus';
-				};
-				ret.unshift({ id: 'add', name: UtilCommon.sprintf(translate(addItemNameKey), data.filter) });
+				ret.unshift({ 
+					id: 'add', 
+					name: UtilCommon.sprintf(isSelect ? translate('menuDataviewOptionListSetStatus') : translate('menuDataviewOptionListCreateOption'), data.filter),
+				});
 			};
 		};
-
-		items = items.filter(it => !value.includes(it.id));
 
 		return items.concat(ret);
 	};
@@ -361,13 +394,13 @@ const MenuOptionList = observer(class MenuOptionList extends React.Component<I.M
 	resize () {
 		const { getId, position, param } = this.props;
 		const { data } = param;
-		const { noFilter } = data;
+		const { noFilter, maxHeight } = data;
 		const items = this.getItems();
 		const obj = $(`#${getId()} .content`);
-		const offset = noFilter ? 16 : 58;
-		const height = Math.max(HEIGHT + offset, Math.min(360, items.length * HEIGHT + offset));
+		const offset = 16 + (noFilter ? 0 : 38);
+		const height = Math.max(HEIGHT + offset, Math.min(maxHeight || 360, items.length * HEIGHT + offset));
 
-		obj.css({ height: height });
+		obj.css({ height });
 		position();
 	};
 	

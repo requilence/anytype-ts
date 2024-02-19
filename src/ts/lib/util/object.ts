@@ -1,5 +1,5 @@
-import { I, C, keyboard, UtilCommon, history as historyPopup, Renderer, UtilFile, translate, Storage, UtilData } from 'Lib';
-import { commonStore, blockStore, popupStore, detailStore, dbStore } from 'Store';
+import { I, C, keyboard, UtilCommon, history as historyPopup, Renderer, UtilFile, translate, Storage, UtilRouter } from 'Lib';
+import { commonStore, authStore, blockStore, popupStore, detailStore, dbStore } from 'Store';
 import Constant from 'json/constant.json';
 
 class UtilObject {
@@ -10,6 +10,9 @@ class UtilObject {
 		let home = this.getSpaceDashboard();
 		if (home && (home.id == I.HomePredefinedId.Last)) {
 			home = Storage.get('lastOpened');
+			if (home && !home.spaceId) {
+				home.spaceId = commonStore.space;
+			};
 		};
 
 		if (!home) {
@@ -22,24 +25,31 @@ class UtilObject {
 		};
 	};
 
-	getSpace () {
-		return detailStore.get(Constant.subId.space, commonStore.workspace);
+	getSpaceview (id?: string) {
+		return detailStore.get(Constant.subId.space, id || blockStore.spaceview);
+	};
+
+	getSpaceviewBySpaceId (id: string) {
+		const subId = Constant.subId.space;
+		return dbStore.getRecords(subId, '').map(id => detailStore.get(subId, id)).find(it => it.targetSpaceId == id);
 	};
 
 	getSpaceDashboard () {
-		const space = this.getSpace();
-		if (!space.spaceDashboardId) {
+		const space = this.getSpaceview();
+		const id = space.spaceDashboardId;
+
+		if (!id) {
 			return null;
 		};
 
 		let home = null;
-		if (space.spaceDashboardId == I.HomePredefinedId.Graph) {
-			home = this.graph();
+		if (id == I.HomePredefinedId.Graph) {
+			home = this.getGraph();
 		} else
-		if (space.spaceDashboardId == I.HomePredefinedId.Last) {
-			home = this.lastOpened();
+		if (id == I.HomePredefinedId.Last) {
+			home = this.getLastOpened();
 		} else {
-			home = detailStore.get(Constant.subId.space, space.spaceDashboardId);
+			home = detailStore.get(Constant.subId.space, id);
 		};
 
 		if (!home || home._empty_ || home.isDeleted) {
@@ -48,7 +58,43 @@ class UtilObject {
 		return home;
 	};
 
-	graph () {
+	getParticipantId (spaceId: string, accountId: string) {
+		spaceId = String(spaceId || '').replace('.', '_');
+		return `_participant_${spaceId}_${accountId}`;
+	};
+
+	getAccountFromParticipantId (id: string) {
+		const a = String(id || '').split('_');
+		return a.length ? a[a.length - 1] : '';
+	};
+
+	getProfile () {
+		return detailStore.get(Constant.subId.profile, blockStore.profile);
+	};
+
+	getParticipant (id?: string) {
+		const { space } = commonStore;
+		const { account } = authStore;
+
+		if (!account) {
+			return null;
+		};
+
+		const object = detailStore.get(Constant.subId.participant, id || this.getParticipantId(space, account.id));
+		return object._empty_ ? null : object;
+	};
+
+	canParticipantWrite (): boolean {
+		const participant = this.getParticipant();
+		return participant ? [ I.ParticipantPermissions.Writer, I.ParticipantPermissions.Owner ].includes(participant.permissions) : true;
+	};
+
+	isSpaceOwner (participantId: string): boolean {
+		const { account } = authStore;
+		return account ? this.getAccountFromParticipantId(participantId) == account.id : false;
+	};
+
+	getGraph () {
 		return { 
 			id: I.HomePredefinedId.Graph, 
 			name: translate('commonGraph'), 
@@ -57,25 +103,30 @@ class UtilObject {
 		};
 	};
 
-	lastOpened () {
+	getLastOpened () {
 		return { 
 			id: I.HomePredefinedId.Last,
-			name: translate('spaceLast'), 
+			name: translate('spaceLast'),
 		};
 	};
 
 	actionByLayout (v: I.ObjectLayout): string {
 		v = v || I.ObjectLayout.Page;
 
+		if (this.isFileLayout(v)) {
+			return 'media';
+		};
+
+		if (this.isSetLayout(v)) {
+			return 'set';
+		};
+
 		let r = '';
 		switch (v) {
 			default:						 r = 'edit'; break;
-			case I.ObjectLayout.Set:
-			case I.ObjectLayout.Collection:	 r = 'set'; break;
+			case I.ObjectLayout.Date:
 			case I.ObjectLayout.Type:		 r = 'type'; break;
 			case I.ObjectLayout.Relation:	 r = 'relation'; break;
-			case I.ObjectLayout.File:
-			case I.ObjectLayout.Image:		 r = 'media'; break;
 			case I.ObjectLayout.Navigation:	 r = 'navigation'; break;
 			case I.ObjectLayout.Graph:		 r = 'graph'; break;
 			case I.ObjectLayout.Store:		 r = 'store'; break;
@@ -92,12 +143,24 @@ class UtilObject {
 			return '';
 		};
 
-		const action = this.actionByLayout(object.layout);
+		const { layout, identityProfileLink } = object;
+		const { accountSpaceId } = authStore;
+		const action = this.actionByLayout(layout);
+
 		if (!action) {
 			return '';
 		};
 
-		return [ 'main', action, object.id ].join('/');
+		let { id, spaceId } = object;
+
+		/*
+		if (identityProfileLink) {
+			id = identityProfileLink;
+			spaceId = accountSpaceId;
+		};
+		*/
+
+		return UtilRouter.build({ page: 'main', action, id, spaceId });
 	};
 
 	openEvent (e: any, object: any, param?: any) {
@@ -108,7 +171,7 @@ class UtilObject {
 		e.preventDefault();
 		e.stopPropagation();
 
-		if (e.shiftKey || popupStore.isOpen('page')) {
+		if (e.shiftKey || keyboard.isPopup()) {
 			this.openPopup(object, param);
 		} else
 		if ((e.metaKey || e.ctrlKey)) {
@@ -119,7 +182,14 @@ class UtilObject {
 	};
 
 	openAuto (object: any, param?: any) {
-		popupStore.isOpen('page') ? this.openPopup(object, param) : this.openRoute(object, param);
+
+		// Prevent opening object in popup from different space
+		if (object.spaceId && (object.spaceId != commonStore.space)) {
+			this.openRoute(object, param);
+			return;
+		};
+
+		keyboard.isPopup() ? this.openPopup(object, param) : this.openRoute(object, param);
 	};
 	
 	openRoute (object: any, param?: any) {
@@ -129,13 +199,13 @@ class UtilObject {
 		};
 
 		keyboard.setSource(null);
-		UtilCommon.route('/' + route, param || {});
+		UtilRouter.go(`/${route}`, param || {});
 	};
 
 	openWindow (object: any) {
 		const route = this.route(object);
 		if (route) {
-			Renderer.send('windowOpen', '/' + route);
+			Renderer.send('windowOpen', `/${route}`);
 		};
 	};
 
@@ -143,7 +213,13 @@ class UtilObject {
 		if (!object) {
 			return;
 		};
-	
+
+		// Prevent opening object in popup from different space
+		if (object.spaceId && (object.spaceId != commonStore.space)) {
+			this.openRoute(object, param);
+			return;
+		};
+
 		const action = this.actionByLayout(object.layout);
 
 		param = param || {};
@@ -164,22 +240,31 @@ class UtilObject {
 
 		keyboard.setSource(null);
 		historyPopup.pushMatch(param.data.matchPopup);
-		window.setTimeout(() => { popupStore.open('page', param); }, Constant.delay.popup);
+		window.setTimeout(() => popupStore.open('page', param), Constant.delay.popup);
 	};
 
 	create (rootId: string, targetId: string, details: any, position: I.BlockPosition, templateId: string, fields: any, flags: I.ObjectFlag[], callBack?: (message: any) => void) {
+		let typeKey = '';
+
 		details = details || {};
 
 		if (!templateId) {
 			details.type = details.type || commonStore.type;
 		};
-		
-		C.BlockLinkCreateWithObject(rootId, targetId, details, position, templateId, fields, flags, (message: any) => {
-			if (message.error.code) {
-				return;
+
+		if (details.type) {
+			const type = dbStore.getTypeById(details.type);
+			if (type) {
+				typeKey = type.uniqueKey;
+
+				if (!templateId) {
+					templateId = type.defaultTemplateId || Constant.templateId.blank;
+				};
 			};
-			
-			if (callBack) {
+		};
+		
+		C.BlockLinkCreateWithObject(rootId, targetId, details, position, templateId, fields, flags, typeKey, commonStore.space, (message: any) => {
+			if (!message.error.code && callBack) {
 				callBack(message);
 			};
 		});
@@ -232,21 +317,17 @@ class UtilObject {
 		C.ObjectSetDetails(rootId, [ { key: 'defaultTemplateId', value: id } ], callBack);
 	};
 
-	defaultName (key: string) {
-		return translate(`defaultName${key}`);
-	};
-
 	name (object: any) {
-		const { isDeleted, type, layout, snippet } = object;
+		const { isDeleted, layout, snippet } = object;
 
 		let name = '';
-		if (!isDeleted && this.isFileType(type)) {
+		if (!isDeleted && this.isFileLayout(layout)) {
 			name = UtilFile.name(object);
 		} else
 		if (layout == I.ObjectLayout.Note) {
 			name = snippet || translate('commonEmpty');
 		} else {
-			name = object.name || this.defaultName('Page');
+			name = object.name || translate('defaultNamePage');
 		};
 
 		return name;
@@ -271,73 +352,49 @@ class UtilObject {
 			};
 
 			if (callBack) {
-				const records = message.records.map(it => detailStore.mapper(it)).filter(it => !it._empty_);
-				callBack(records);
+				callBack(message.records.map(it => detailStore.mapper(it)).filter(it => !it._empty_));
 			};
 		});
 	};
 
-	isFileType (type: string) {
-		return this.getFileTypes().includes(type);
+	isFileLayout (layout: I.ObjectLayout): boolean {
+		return this.getFileLayouts().includes(layout);
 	};
 
-	isSystemType (type: string) {
-		return this.getSystemTypes().includes(type);
+	isFileOrSystemLayout (layout: I.ObjectLayout): boolean {
+		return this.getFileAndSystemLayouts().includes(layout);
 	};
 
-	isSetType (type: string) {
-		return this.getSetTypes().includes(type);
+	isSystemLayout (layout: I.ObjectLayout): boolean {
+		return this.getSystemLayouts().includes(layout);
 	};
 
-	isStoreType (type: string) {
-		return this.getStoreTypes().includes(type);
+	isSetLayout (layout: I.ObjectLayout): boolean {
+		return this.getSetLayouts().includes(layout);
 	};
 
-	isTemplate (type: string) {
-		return type == Constant.typeId.template;
+	isTemplate (type: string): boolean {
+		const templateType = dbStore.getTemplateType();
+		return templateType ? type == templateType.id : false;
 	};
 
-	getSystemAndFileTypes () {
-		return this.getSystemTypes().concat(this.getFileTypes());
+	isTypeOrRelationLayout (layout: I.ObjectLayout): boolean {
+		return this.isTypeLayout(layout) || this.isRelationLayout(layout);
 	};
 
-	getFileTypes () {
-		return [
-			Constant.typeId.file, 
-			Constant.typeId.image, 
-			Constant.typeId.audio, 
-			Constant.typeId.video,
-		];
+	isTypeLayout (layout: I.ObjectLayout): boolean {
+		return layout == I.ObjectLayout.Type;
 	};
 
-	getSystemTypes () {
-		return [
-			Constant.typeId.type,
-			Constant.typeId.template,
-			Constant.typeId.relation,
-			Constant.typeId.option,
-			Constant.typeId.dashboard,
-			Constant.typeId.date,
-			Constant.typeId.space,
-		].concat(this.getStoreTypes());
+	isRelationLayout (layout: I.ObjectLayout): boolean {
+		return layout == I.ObjectLayout.Relation;
 	};
 
-	getStoreTypes () {
-		return [
-			Constant.storeTypeId.type,
-			Constant.storeTypeId.relation,
-			Constant.storeTypeId.template,
-		];
+	isPageLayout (layout: I.ObjectLayout): boolean {
+		return this.getPageLayouts().includes(layout);
 	};
 
-	getSetTypes () {
-		return [ 
-			Constant.typeId.set, 
-			Constant.typeId.collection,
-		];
-	};
-
-	getPageLayouts () {
+	getPageLayouts (): I.ObjectLayout[] {
 		return [ 
 			I.ObjectLayout.Page, 
 			I.ObjectLayout.Human, 
@@ -347,47 +404,53 @@ class UtilObject {
 		];
 	};
 
-	getLayoutsWithoutTemplates () {
-		return [
-			I.ObjectLayout.Note,
+	getSetLayouts (): I.ObjectLayout[] {
+		return [ 
 			I.ObjectLayout.Set,
 			I.ObjectLayout.Collection,
-			I.ObjectLayout.Bookmark,
-		].concat(this.getFileAndSystemLayouts());
-	}
+		];
+	};
 
-	getFileAndSystemLayouts () {
+	getLayoutsWithoutTemplates (): I.ObjectLayout[] {
+		return [].concat(this.getFileAndSystemLayouts()).concat(this.getSetLayouts());
+	};
+
+	getFileAndSystemLayouts (): I.ObjectLayout[] {
 		return this.getFileLayouts().concat(this.getSystemLayouts());
 	};
 
-	getSystemLayouts () {
+	getSystemLayouts (): I.ObjectLayout[] {
 		return [
 			I.ObjectLayout.Type,
 			I.ObjectLayout.Relation,
 			I.ObjectLayout.Option,
 			I.ObjectLayout.Dashboard,
-			I.ObjectLayout.Date,
+			I.ObjectLayout.Space,
+			I.ObjectLayout.SpaceView,
 		];
 	};
 
-	getFileLayouts () {
+	getFileLayouts (): I.ObjectLayout[] {
 		return [
 			I.ObjectLayout.File,
 			I.ObjectLayout.Image,
 			I.ObjectLayout.Audio,
 			I.ObjectLayout.Video,
+			I.ObjectLayout.Pdf,
+		];
+	};
+
+	excludeFromSet (): I.ObjectLayout[] {
+		return [ 
+			I.ObjectLayout.Option, 
+			I.ObjectLayout.SpaceView, 
+			I.ObjectLayout.Space,
 		];
 	};
 
 	isAllowedTemplate (typeId): boolean {
-		const type = dbStore.getType(typeId);
+		const type = dbStore.getTypeById(typeId);
 		return type ? !this.getLayoutsWithoutTemplates().includes(type.recommendedLayout) : false;
-	};
-
-	checkDefaultTemplate (typeId: string, templateId: string, callBack: (res) => void) {
-		UtilData.getTemplatesByTypeId(typeId, (message) => {
-			callBack((message.records || []).map(it => it.id).includes(templateId));
-		});
 	};
 
 };

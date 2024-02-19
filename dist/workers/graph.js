@@ -15,11 +15,14 @@ const util = new Util();
 // CONSTANTS
 
 const transformThreshold = 1.5;
+const transformThresholdHalf = transformThreshold / 2;
+const delayFocus = 1000;
 
 const ObjectLayout = {
-	Human:	 1,
-	Task:	 2,
-	Bookmark: 11,
+	Human:		 1,
+	Task:		 2,
+	Bookmark:	 11,
+	Participant: 19,
 };
 
 const EdgeType = {
@@ -60,17 +63,20 @@ let nodes = [];
 let edges = [];
 let images = {};
 let simulation = null;
-let Color = {};
 let frame = 0;
 let selected = [];
 let settings = {};
 let time = 0;
 let isHovering = false;
 let edgeMap = new Map();
-let hoverAlpha = 0.2;
+let nodeMap = new Map();
+let hoverAlpha = 0.3;
 let fontFamily = 'Helvetica, san-serif';
 let timeoutHover = 0;
+let rootId = '';
 let root = null;
+let paused = false;
+let isOver = '';
 
 addEventListener('message', ({ data }) => { 
 	if (this[data.id]) {
@@ -82,7 +88,7 @@ init = (param) => {
 	data = param;
 	canvas = data.canvas;
 	settings = data.settings;
-
+	rootId = data.rootId;
 	ctx = canvas.getContext('2d');
 
 	util.ctx = ctx;
@@ -91,7 +97,7 @@ init = (param) => {
 	initFonts();
 
 	ctx.lineCap = 'round';
-	ctx.fillStyle = Color.bg;
+	ctx.fillStyle = data.colors.bg;
 	
 	transform = d3.zoomIdentity.translate(0, 0).scale(1.5);
 	simulation = d3.forceSimulation(nodes);
@@ -99,16 +105,15 @@ init = (param) => {
 
 	initForces();
 
-	simulation.on('tick', () => { redraw(); });
+	simulation.on('tick', () => redraw());
 	simulation.tick(100);
 
-	// Center initially on root node
 	setTimeout(() => {
-		root = getNodeById(data.rootId);
+		root = getNodeById(rootId);
 
 		let x = width / 2;
 		let y = height / 2;
-		
+
 		if (root) {
 			x = root.x;
 			y = root.y;
@@ -122,30 +127,8 @@ init = (param) => {
 
 initTheme = (theme) => {
 	switch (theme) {
-		default:
-			hoverAlpha = 0.3;
-			Color = {
-				bg: '#fff',
-				link: '#dfddd0',
-				arrow: '#b6b6b6',
-				node: '#b6b6b6',
-				text: '#b6b6b6',
-				highlight: '#ffb522',
-				selected: '#2aa7ee',
-			}; 
-			break;
-
 		case 'dark':
 			hoverAlpha = 0.2;
-			Color = {
-				bg: '#171717',
-				link: '#3f3f3f',
-				arrow: '#555',
-				node: '#9a9a9a',
-				text: '#8d8d8d',
-				highlight: '#ffb522',
-				selected: '#2aa7ee',
-			};
 			break;
 	};
 };
@@ -156,10 +139,10 @@ initFonts = () => {
 	};
 
 	const name = 'Inter';
-	const fontFace = new FontFace(name, `url("../font/inter/regular.woff") format("woff")`);
+	const fontFace = new FontFace(name, `url("../font/inter/regular.woff2") format("woff2")`);
 
 	self.fonts.add(fontFace);
-	fontFace.load().then(() => { fontFamily = name; });
+	fontFace.load().then(() => fontFamily = name);
 };
 
 image = ({ src, bitmap }) => {
@@ -170,6 +153,8 @@ image = ({ src, bitmap }) => {
 
 initForces = () => {
 	const { center, charge, link, forceX, forceY } = forceProps;
+
+	updateOrphans();
 
 	simulation
 	.force('link', d3.forceLink().id(d => d.id))
@@ -199,34 +184,37 @@ initForces = () => {
 	.y(height * forceY.y);
 
 	updateForces();
+	redraw();
 };
 
 updateForces = () => {
-	let old = getNodeMap();
+	const old = getNodeMap();
 
 	edges = util.objectCopy(data.edges);
 	nodes = util.objectCopy(data.nodes);
 
+	updateOrphans();
+
 	// Filter links
 	if (!settings.link) {
-		edges = edges.filter(d => d.type != EdgeType.Link);
+		nodes = nodes.filter(d => !d.linkCnt);
 	};
 
 	// Filter relations
 	if (!settings.relation) {
-		edges = edges.filter(d => d.type != EdgeType.Relation);
+		nodes = nodes.filter(d => !d.relationCnt);
+	};
+
+	// Filte local only edges
+	if (settings.local) {
+		edges = getEdgesByNodeId(rootId);
+
+		const nodeIds = util.arrayUnique([ rootId ].concat(edges.map(d => d.source)).concat(edges.map(d => d.target)));
+		nodes = nodes.filter(d => nodeIds.includes(d.id));
 	};
 
 	let map = getNodeMap();
 	edges = edges.filter(d => map.get(d.source) && map.get(d.target));
-
-	// Recalculate orphans
-	nodes = nodes.map(d => {
-		d.sourceCnt = edges.filter(it => it.source == d.id).length;
-		d.targetCnt = edges.filter(it => it.target == d.id).length;
-		d.isOrphan = !d.sourceCnt && !d.targetCnt;
-		return d;
-	});
 
 	// Filter orphans
 	if (!settings.orphan) {
@@ -237,7 +225,13 @@ updateForces = () => {
 	edges = edges.filter(d => map.get(d.source) && map.get(d.target));
 
 	// Shallow copy to disable mutations
-	nodes = nodes.map(d => Object.assign(old.get(d.id) || {}, d));
+	nodes = nodes.map(d => {
+		let o = old.get(d.id);
+		if (!o) {
+			o = settings.local ? { x: width / 2, y: width / 2 } : {};
+		};
+		return Object.assign(o, d);
+	});
 	edges = edges.map(d => Object.assign({}, d));
 
 	simulation.nodes(nodes);
@@ -254,26 +248,52 @@ updateForces = () => {
 	});
 
 	simulation.alpha(1).restart();
+
+	nodeMap = getNodeMap();
 	redraw();
 };
 
 updateSettings = (param) => {
-	const needUpdate = (param.link != settings.link) || 
-						(param.relation != settings.relation) || 
-						(param.orphan != settings.orphan);
+	const updateKeys = [ 'link', 'relation', 'orphan', 'local' ];
+	
+	let needUpdate = false;
+	let needFocus = false;
+
+	for (let key of updateKeys) {
+		if (param[key] != settings[key]) {
+			needUpdate = true;
+
+			if (key == 'local') {
+				needFocus = true;
+			};
+
+			break;
+		};
+	};
 
 	settings = Object.assign(settings, param);
+	needUpdate ? updateForces() : redraw();
 
-	if (needUpdate) {
-		updateForces();
-	} else {
-		redraw();
+	if (needFocus) {
+		setTimeout(() => this.setRootId({ rootId }), delayFocus);
 	};
 };
 
 updateTheme = ({ theme }) => {
 	initTheme(theme);
 	redraw();
+};
+
+updateOrphans = () => {
+	nodes = nodes.map(d => {
+		const edges = getEdgesByNodeId(d.id);
+		
+		d.isOrphan = !edges.length;
+		d.linkCnt = edges.filter(it => it.type == EdgeType.Link).length;
+		d.relationCnt = edges.filter(it => it.type == EdgeType.Relation).length;
+
+		return d;
+	});
 };
 
 draw = (t) => {
@@ -289,7 +309,7 @@ draw = (t) => {
 	ctx.font = getFont();
 
 	edges.forEach(d => {
-		drawLine(d, radius, radius * 1.3, settings.marker && d.isDouble, settings.marker);
+		drawEdge(d, radius, radius * 1.3, settings.marker && d.isDouble, settings.marker);
 	});
 
 	nodes.forEach(d => {
@@ -303,10 +323,12 @@ draw = (t) => {
 
 redraw = () => {
 	cancelAnimationFrame(frame);
-	frame = requestAnimationFrame(draw);
+	if (!paused) {
+		frame = requestAnimationFrame(draw);
+	};
 };
 
-drawLine = (d, arrowWidth, arrowHeight, arrowStart, arrowEnd) => {
+drawEdge = (d, arrowWidth, arrowHeight, arrowStart, arrowEnd) => {
 	const x1 = d.source.x;
 	const y1 = d.source.y;
 	const r1 = getRadius(d.source);
@@ -326,22 +348,20 @@ drawLine = (d, arrowWidth, arrowHeight, arrowStart, arrowEnd) => {
 	const sx2 = x2 + r2 * cos2;
 	const sy2 = y2 + r2 * sin2;
 	const k = 5 / transform.k;
-	const isOver = d.source.isOver || d.target.isOver;
-	const showName = isOver && d.name && settings.label;
+	const io = (isOver == d.source.id) || (isOver == d.target.id);
+	const showName = io && d.name && settings.label;
 	const lineWidth = getLineWidth();
 
-	let colorLink = Color.link;
-	let colorArrow = Color.arrow;
-	let colorText = Color.text;
+	let colorLink = data.colors.link;
+	let colorArrow = data.colors.arrow;
+	let colorText = data.colors.text;
 
 	if (isHovering) {
 		ctx.globalAlpha = hoverAlpha;
 	};
 
-	if (isOver) {
-		colorLink = Color.highlight;
-		colorArrow = Color.highlight;
-		colorText = Color.highlight;
+	if (io) {
+		colorLink = colorArrow = colorText = data.colors.highlight;
 		ctx.globalAlpha = 1;
 	};
 
@@ -370,7 +390,7 @@ drawLine = (d, arrowWidth, arrowHeight, arrowStart, arrowEnd) => {
 
 		ctx.strokeStyle = colorLink;
 		ctx.lineWidth = lineWidth * 3;
-		ctx.fillStyle = Color.bg;
+		ctx.fillStyle = data.colors.bg;
 		ctx.fill();
 		ctx.stroke();
 
@@ -381,26 +401,30 @@ drawLine = (d, arrowWidth, arrowHeight, arrowStart, arrowEnd) => {
 	};
 
 	// Arrow heads
-	let move = arrowHeight;
-	if (showName) {
-		move = arrowHeight * 2 + tw / 2 + offset;
-	} else 
-	if (arrowStart && arrowEnd) {
-		move = arrowHeight * 2;
+
+	if ((arrowStart || arrowEnd) && (transform.k >= transformThresholdHalf)) {
+		let move = arrowHeight;
+		if (showName) {
+			move = arrowHeight * 2 + tw / 2 + offset;
+		} else 
+		if (arrowStart && arrowEnd) {
+			move = arrowHeight * 2;
+		};
+
+		if (arrowStart) {
+			const sax1 = mx - move * cos1;
+			const say1 = my - move * sin1;
+
+			util.arrowHead(sax1, say1, a1, arrowWidth, arrowHeight, colorArrow);
+		};
+
+		if (arrowEnd) {
+			const sax2 = mx - move * cos2;
+			const say2 = my - move * sin2;
+
+			util.arrowHead(sax2, say2, a2, arrowWidth, arrowHeight, colorArrow);
+		};
 	};
-
-	const sax1 = mx - move * cos1;
-	const say1 = my - move * sin1;
-	const sax2 = mx - move * cos2;
-	const say2 = my - move * sin2;
-
-	if (arrowStart) {
-		util.arrowHead(sax1, say1, a1, arrowWidth, arrowHeight, colorArrow);
-    };
-
-    if (arrowEnd) {
-		util.arrowHead(sax2, say2, a2, arrowWidth, arrowHeight, colorArrow);
-    };
 };
 
 drawNode = (d) => {
@@ -408,9 +432,10 @@ drawNode = (d) => {
 	const img = images[d.src];
 	const diameter = radius * 2;
 	const isSelected = selected.includes(d.id);
+	const io = isOver == d.id;
 	
-	let colorNode = Color.node;
-	let colorText = Color.text;
+	let colorNode = data.colors.node;
+	let colorText = data.colors.text;
 	let colorLine = '';
 	let lineWidth = 0;
 
@@ -420,9 +445,7 @@ drawNode = (d) => {
 		const connections = edgeMap.get(d.id);
 		if (connections && connections.length) {
 			for (let i = 0; i < connections.length; i++) {
-				const c = getNodeById(connections[i]);
-
-				if (c.isOver) {
+				if (isOver == connections[i]) {
 					ctx.globalAlpha = 1;
 					break;
 				};
@@ -430,30 +453,26 @@ drawNode = (d) => {
 		};
 	};
 
-	if (d.isOver || (root && (d.id == root.id))) {
-		colorNode = Color.highlight;
-		colorText = Color.highlight;
-		colorLine = Color.highlight;
+	if (io || (root && (d.id == root.id))) {
+		colorNode = colorText = colorLine = data.colors.highlight;
 		lineWidth = getLineWidth() * 3;
 		ctx.globalAlpha = 1;
 	};
 
 	if (isSelected) {
-		colorNode = Color.selected;
-		colorText = Color.selected;
-		colorLine = Color.selected;
+		colorNode = colorText = colorLine = data.colors.selected;
 	};
 
-	if (d.isOver || isSelected) {
+	if (io || isSelected) {
 		lineWidth = getLineWidth() * 3;
 	};
 
-	if (settings.icon && img) {
+	if (settings.icon && img && (transform.k >= transformThresholdHalf)) {
 		ctx.save();
 
 		if (lineWidth) {
 			util.roundedRect(d.x - radius - lineWidth * 2, d.y - radius - lineWidth * 2, diameter + lineWidth * 4, diameter + lineWidth * 4, getBorderRadius());
-			ctx.fillStyle = Color.bg;
+			ctx.fillStyle = data.colors.bg;
 			ctx.fill();
 
 			ctx.strokeStyle = colorLine;
@@ -470,13 +489,13 @@ drawNode = (d) => {
 			x = d.x - radius;
 			y = d.y - radius;
 	
-			if (isIconCircle(d)) {
+			if (isLayoutHuman(d) || isLayoutParticipant(d)) {
 				util.circle(d.x, d.y, radius);
 			} else {
 				util.roundedRect(d.x - radius, d.y - radius, diameter, diameter, getBorderRadius());
 			};
 	
-			ctx.fillStyle = Color.bg;
+			ctx.fillStyle = data.colors.bg;
 			ctx.fill();
 			ctx.clip();
 	
@@ -510,7 +529,7 @@ drawNode = (d) => {
 		// Rectangle
 		ctx.save();
 		ctx.translate(d.x, d.y);
-		ctx.fillStyle = Color.bg;
+		ctx.fillStyle = data.colors.bg;
 		util.rect(left, top + diameter + offset, tw, th);
 		ctx.fill();
 
@@ -539,7 +558,7 @@ onDragMove = ({ subjectId, x, y }) => {
 		return;
 	};
 
-	const d = nodes.find(it => it.id == subjectId);
+	const d = getNodeById(subjectId);
 	if (!d) {
 		return;
 	};
@@ -577,25 +596,33 @@ onSelect = ({ x, y, selectRelated }) => {
 	};
 };
 
+onSetRootId = ({ x, y }) => {
+  	const d = getNodeByCoords(x, y);
+	if (d) {
+		this.setRootId({ rootId: d.id });
+	};
+};
+
+onSetEdges = (param) => {
+	data.edges = param.edges;
+	updateForces();
+};
+
+onSetSelected = ({ ids }) => {
+	selected = ids;
+};
+
 onMouseMove = ({ x, y }) => {
-	const active = nodes.find(d => d.isOver);
 	const d = getNodeByCoords(x, y);
 
-	if (active) {
-		active.isOver = false;
-	};
-
-	if (d) {
-		d.isOver = true;
-	} else {
-		isHovering = false;
-	};
+	isOver = d ? d.id : '';
 
 	send('onMouseMove', { node: (d ? d.id : ''), x, y, k: transform.k });
 	redraw();
 	clearTimeout(timeoutHover);
 
 	if (!d) {
+		isHovering = false;
 		return;
 	};
 
@@ -610,19 +637,16 @@ onMouseMove = ({ x, y }) => {
 };
 
 onContextMenu = ({ x, y }) => {
-	const active = nodes.find(d => d.isOver);
-	if (active) {
-		active.isOver = false;
-	};
-
 	const d = getNodeByCoords(x, y);
-	if (!d) {
+
+	isOver = d ? d.id : '';
+
+	if (d) {
+		send('onContextMenu', { node: d, x, y });
+	} else {
 		send('onContextSpaceClick', { x, y });
-		return;
 	};
 
-	d.isOver = true;
-	send('onContextMenu', { node: d, x, y });
 	redraw();
 };
 
@@ -633,7 +657,7 @@ onAddNode = ({ target, sourceId }) => {
 	let y = 0;
 
 	if (sourceId) {
-		const source = nodes.find(it => it.id == sourceId);
+		const source = getNodeById(sourceId);
 		if (!source) {
 			return;
 		};
@@ -667,21 +691,12 @@ onRemoveNode = ({ ids }) => {
 	data.edges = data.edges.filter(d => !ids.includes(d.source.id) && !ids.includes(d.target.id));
 
 	updateForces();
-	redraw();
 };
 
-onSetEdges = (param) => {
-	data.edges = param.edges;
+setRootId = (param) => {
+	rootId = param.rootId;
+	root = getNodeById(rootId);
 
-	updateForces();
-};
-
-onSetSelected = ({ ids }) => {
-	selected = ids;
-};
-
-onSetRootId = ({ rootId }) => {
-	root = nodes.find(d => d.id == rootId);
 	if (!root) {
 		return;
 	};
@@ -696,12 +711,14 @@ onSetRootId = ({ rootId }) => {
 		transform = Object.assign(transform, coords);
 		redraw();
 	})
-	.onComplete(() => {
-		send('onTransform', { ...transform });
-	})
+	.onComplete(() => send('onTransform', { ...transform }))
 	.start();
 
-	redraw();
+	if (settings.local) {
+		updateForces();
+	} else {
+		redraw();
+	};
 };
 
 restart = (alpha) => {
@@ -738,24 +755,32 @@ const isLayoutHuman = (d) => {
 	return d.layout == ObjectLayout.Human;
 };
 
+const isLayoutParticipant = (d) => {
+	return d.layout == ObjectLayout.Participant;
+};
+
 const isLayoutBookmark = (d) => {
 	return d.layout == ObjectLayout.Bookmark;
 };
 
-const isIconCircle = (d) => {
-	return isLayoutHuman(d);
-};
-
 const getNodeById = (id) => {
-	return nodes.find(d => d.id == id);
+	return nodeMap.get(id) || nodes.find(d => d.id == id);
 };
 
 const getNodeByCoords = (x, y) => {
 	return simulation.find(transform.invertX(x), transform.invertY(y), 10 / transform.k);
 };
 
+const getEdgesByNodeId = (id) => {
+	return edges.filter(d => (d.source == id) || (d.target == id));
+};
+
 const getRadius = (d) => {
-	return d.radius / transform.k * (settings.icon && images[d.src] ? 2 : 1);
+	let k = 1;
+	if (settings.icon && images[d.src] && (transform.k >= transformThresholdHalf)) {
+		k = 2;
+	};
+	return d.radius / transform.k * k;
 };
 
 const getFont = () => {

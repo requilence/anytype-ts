@@ -4,7 +4,7 @@ import { observer } from 'mobx-react';
 import { observable } from 'mobx';
 import { I, C, UtilObject, UtilMenu, Relation, translate, Dataview, keyboard, analytics, Preview, UtilData, UtilCommon } from 'Lib';
 import { Icon, Input, MenuItemVertical, Button } from 'Component';
-import { blockStore, dbStore, menuStore, detailStore } from 'Store';
+import { blockStore, dbStore, menuStore, detailStore, commonStore } from 'Store';
 import Constant from 'json/constant.json';
 
 const MenuRelationEdit = observer(class MenuRelationEdit extends React.Component<I.Menu> {
@@ -45,7 +45,7 @@ const MenuRelationEdit = observer(class MenuRelationEdit extends React.Component
 		if (isObject && !isReadonly && (!relation || !relation.isReadonlyValue)) {
 			const length = this.objectTypes.length;
 			const typeId = length ? this.objectTypes[0] : '';
-			const type = dbStore.getType(typeId);
+			const type = dbStore.getTypeById(typeId);
 			const typeProps: any = { 
 				name: translate('menuDataviewRelationEditSelectObjectType'),
 				caption: (length > 1 ? '+' + (length - 1) : ''),
@@ -149,7 +149,7 @@ const MenuRelationEdit = observer(class MenuRelationEdit extends React.Component
 							<MenuItemVertical 
 								key={c}
 								{...action}
-								onClick={(e: any) => { this.onClick(e, action); }} 
+								onClick={e => this.onClick(e, action)} 
 								onMouseEnter={this.menuClose} 
 							/>
 						))}
@@ -211,7 +211,7 @@ const MenuRelationEdit = observer(class MenuRelationEdit extends React.Component
 	getSections () {
 		const { param } = this.props;
 		const { data } = param;
-		const { rootId, blockId, extendedOptions } = data;
+		const { rootId, blockId, extendedOptions, readonly } = data;
 		const relation = this.getRelation();
 		const isFile = relation && (relation.format == I.RelationType.File);
 		const canFilter = !isFile;
@@ -237,7 +237,7 @@ const MenuRelationEdit = observer(class MenuRelationEdit extends React.Component
 			}
 		];
 
-		if (extendedOptions) {
+		if (extendedOptions && !readonly) {
 			sections.push({
 				children: [
 					canFilter ? { id: 'filter', icon: 'relation-filter', name: translate('menuDataviewRelationEditAddFilter') } : null,
@@ -423,7 +423,7 @@ const MenuRelationEdit = observer(class MenuRelationEdit extends React.Component
 
 		const { param, getSize } = this.props;
 		const { data } = param;
-		const { rootId, blockId } = data;
+		const { rootId } = data;
 
 		if (this.isReadonly()) {
 			return;
@@ -442,17 +442,16 @@ const MenuRelationEdit = observer(class MenuRelationEdit extends React.Component
 			width: getSize().width,
 			data: {
 				rootId,
-				blockId,
 				nameAdd: translate('menuDataviewRelationEditAddObjectType'),
 				placeholderFocus: translate('menuDataviewRelationEditFilterObjectTypes'),
 				value: this.objectTypes, 
-				types: [ Constant.typeId.type ],
+				types: [ dbStore.getTypeType()?.id ],
 				filters: [
-					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.In, value: Constant.typeId.type },
-					{ operator: I.FilterOperator.And, relationKey: 'id', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemTypes() },
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Type },
+					{ operator: I.FilterOperator.And, relationKey: 'recommendedLayout', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemLayouts() },
 				],
 				relation: observable.box(relation),
-				valueMapper: it => dbStore.getType(it.id),
+				valueMapper: it => dbStore.getTypeById(it.id),
 				onChange: (value: any, callBack?: () => void) => {
 					this.objectTypes = value;
 					this.forceUpdate();
@@ -605,7 +604,7 @@ const MenuRelationEdit = observer(class MenuRelationEdit extends React.Component
 		const { rootId, blockId, addCommand, onChange, ref } = data;
 		const object = detailStore.get(rootId, rootId);
 
-		C.ObjectCreateRelation(item, (message: any) => {
+		C.ObjectCreateRelation(item, commonStore.space, (message: any) => {
 			if (message.error.code) {
 				return;
 			};

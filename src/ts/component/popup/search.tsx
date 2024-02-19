@@ -2,9 +2,9 @@ import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { AutoSizer, CellMeasurer, InfiniteLoader, List, CellMeasurerCache } from 'react-virtualized';
-import { Icon, Input, Loader, IconObject, ObjectName, EmptySearch, Label, Filter } from 'Component';
-import { I, UtilCommon, UtilData, UtilObject, keyboard, Key, focus, translate, analytics } from 'Lib';
-import { commonStore, dbStore } from 'Store';
+import { Icon, Loader, IconObject, ObjectName, EmptySearch, Label, Filter } from 'Component';
+import { I, UtilCommon, UtilData, UtilObject, UtilRouter, keyboard, Key, focus, translate, analytics, Action } from 'Lib';
+import { commonStore, dbStore, popupStore } from 'Store';
 import Constant from 'json/constant.json';
 
 interface State {
@@ -51,23 +51,35 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 
 		const Item = (item: any) => {
 			let content = null;
+			let icon = null;
+			let object = null;
+
+			if (item.isObject) {
+				object = item;
+			} else 
+			if (item.id == 'account') {
+				object = UtilObject.getParticipant();
+			} else 
+			if (item.id == 'spaceIndex') {
+				object = UtilObject.getSpaceview();
+			};
+
+			if (object) {
+				icon = <IconObject object={object} size={18} />;
+			} else {
+				icon = <Icon className={item.icon} />;
+			};
+
 			if (item.isObject) {
 				content = (
 					<React.Fragment>
-						<IconObject object={item} size={18} />
 						<ObjectName object={item} />
 						<div className="caption">{item.caption}</div>
 					</React.Fragment>
 				);
 			} else {
-				let caption = '';
-				if (item.shortcut) {
-					caption = item.shortcut.map(it => <div className="key">{it}</div>).join('');
-				};
-
 				content = (
 					<React.Fragment>
-						<Icon className={item.icon} />
 						<div className="name">{item.name}</div>
 						<div className="caption">
 							{item.shortcut.map((item, i) => (
@@ -82,9 +94,10 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 				<div 
 					id={'item-' + item.id} 
 					className={[ 'item', (item.isHidden ? 'isHidden' : '') ].join(' ')} 
-					onMouseOver={(e: any) => { this.onOver(e, item); }} 
-					onClick={(e: any) => { this.onClick(e, item); }}
+					onMouseOver={e => this.onOver(e, item)} 
+					onClick={e => this.onClick(e, item)}
 				>
+					{icon}
 					{content}
 				</div>
 			);
@@ -174,6 +187,10 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 	};
 	
 	componentDidMount () {
+		const { param } = this.props;
+		const { data } = param;
+		const { route } = data;
+
 		this._isMounted = true;
 		this.n = -1;
 
@@ -182,6 +199,8 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 		this.resize();
 
 		focus.clear(true);
+
+		analytics.event('ScreenSearch', { route });
 	};
 	
 	componentDidUpdate () {
@@ -231,7 +250,7 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 		
 		const win = $(window);
 		win.on('keydown.search', e => this.onKeyDown(e));
-		win.on('resize.search', (e: any) => { this.resize(); });
+		win.on('resize.search', e => this.resize());
 	};
 
 	unbind () {
@@ -248,18 +267,29 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 		const items = this.getItems();
 		const cmd = keyboard.cmdKey();
 		const k = keyboard.eventKey(e);
+		const filter = this.getFilter();
 
-		if ((k != Key.down) && (this.n == -1)) {
+		if ((this.n == -1) && ![ Key.down, Key.enter ].includes(k)) {
 			return;
 		};
 
 		keyboard.disableMouse(true);
 
 		keyboard.shortcut('arrowup, arrowdown', e, (pressed: string) => {
-			this.onArrow(pressed.match(Key.up) ? -1 : 1);
+			this.onArrow(pressed == 'arrowup' ? -1 : 1);
 		});
 
 		keyboard.shortcut(`enter, shift+enter, ${cmd}+enter`, e, (pressed: string) => {
+			const reg = new RegExp(`^${Constant.protocol}:\/\/`);
+
+			if (reg.test(filter)) {
+				const route = filter.replace(reg, '');
+				if (route) {
+					UtilRouter.go(`/${route}`, {});
+				};
+				return;
+			};
+
 			const item = items[this.n];
 			if (item) {
 				this.onClick(e, item);
@@ -334,9 +364,10 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 
 	load (clear: boolean, callBack?: (value: any) => void) {
 		const filter = this.getFilter();
-		const skipTypes = [].concat(UtilObject.getFileTypes()).concat(UtilObject.getSystemTypes());
+		const templateType = dbStore.getTemplateType();
 		const filters: any[] = [
-			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: skipTypes },
+			{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.NotIn, value: UtilObject.getFileAndSystemLayouts() },
+			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotEqual, value: templateType?.id },
 		];
 		const sorts = [
 			{ relationKey: 'lastOpenedDate', type: I.SortType.Desc },
@@ -351,7 +382,7 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 			sorts,
 			fullText: filter,
 			offset: this.offset,
-			limit: !filter ? 8 : Constant.limit.menuRecords,
+			limit: !filter && clear ? 8 : Constant.limit.menuRecords,
 		}, (message: any) => {
 			if (message.error.code) {
 				this.setState({ loading: false });
@@ -378,7 +409,17 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 
 	getItems () {
 		const cmd = keyboard.cmdSymbol();
+		const alt = keyboard.altSymbol();
 		const hasRelations = keyboard.isMainEditor() || keyboard.isMainSet();
+		const filter = this.getFilter();
+		const lang = Constant.default.interfaceLang;
+
+		let name = '';
+		if (filter) {
+			name = UtilCommon.sprintf(translate('commonCreateObject'), filter);
+		} else {
+			name = translate('popupSearchCreateObject');
+		};
 
 		let items = this.items.filter(this.filterMapper);
 		if (items.length) {
@@ -386,7 +427,7 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 		};
 
 		items = items.map(it => {
-			const type = dbStore.getType(it.type);
+			const type = dbStore.getTypeById(it.type);
 
 			return { 
 				...it,
@@ -395,11 +436,88 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 			};
 		});
 
-		items.push({ id: 'add', name: translate('popupSearchCreateObject'), icon: 'plus', shortcut: [ cmd, 'N' ] });
+		/* Settings and pages */
+
+		if (filter) {
+			const reg = new RegExp(UtilCommon.regexEscape(filter), 'gi');
+
+			const itemsImport: any[] = ([
+				{ id: 'importHtml', icon: 'import-html', name: translate('popupSettingsImportHtmlTitle'), format: I.ImportType.Html },
+				{ id: 'importText', icon: 'import-text', name: translate('popupSettingsImportTextTitle'), format: I.ImportType.Text },
+				{ id: 'importProtobuf', icon: 'import-protobuf', name: translate('popupSettingsImportProtobufTitle'), format: I.ImportType.Protobuf },
+				{ id: 'importMarkdown', icon: 'import-markdown', name: translate('popupSettingsImportMarkdownTitle'), format: I.ImportType.Markdown },
+			] as any[]).map(it => ({ ...it, isImport: true }));
+
+			const settingsSpace: any[] = ([
+				{ id: 'spaceIndex', name: translate('popupSettingsSpaceTitle') },
+
+				{ id: 'importIndex', icon: 'settings-import', name: translate('popupSettingsImportTitle') },
+				{ id: 'importNotion', icon: 'import-notion', name: translate('popupSettingsImportNotionTitle') },
+				{ id: 'importCsv', icon: 'import-csv', name: translate('popupSettingsImportCsvTitle') },
+
+				{ id: 'exportIndex', icon: 'settings-export', name: translate('popupSettingsExportTitle') },
+				{ id: 'exportProtobuf', icon: 'import-protobuf', name: translate('popupSettingsExportProtobufTitle') },
+				{ id: 'exportMarkdown', icon: 'import-markdown', name: translate('popupSettingsExportMarkdownTitle') },
+			] as any).map(it => ({ ...it, isSpace: true, className: 'isSpace' }));
+			
+			const settingsAccount: any[] = [
+				{ id: 'account', name: translate('popupSettingsProfileTitle') },
+				{ 
+					id: 'personal', icon: 'settings-personal', name: translate('popupSettingsPersonalTitle'),
+					aliases: [ 
+						translate('commonLanguage', lang), translate('commonLanguage'),
+						translate('commonSpelling', lang), translate('commonSpelling'),
+					] 
+				},
+				{ 
+					id: 'appearance', icon: 'settings-appearance', name: translate('popupSettingsAppearanceTitle'), 
+					aliases: [ translate('commonSidebar', lang), translate('commonSidebar') ] 
+				},
+				{ id: 'pinIndex', icon: 'settings-pin', name: translate('popupSettingsPinTitle') },
+				{ id: 'dataManagement', icon: 'settings-storage', name: translate('popupSettingsDataManagementTitle') },
+				{ id: 'phrase', icon: 'settings-phrase', name: translate('popupSettingsPhraseTitle') },
+			];
+
+			const pageItems: any[] = [
+				{ id: 'graph', icon: 'graph', name: translate('commonGraph'), shortcut: [ cmd, alt, 'O' ], layout: I.ObjectLayout.Graph },
+				{ id: 'navigation', icon: 'navigation', name: translate('commonFlow'), shortcut: [ cmd, 'O' ], layout: I.ObjectLayout.Navigation },
+			];
+
+			const settingsItems = settingsAccount.concat(settingsSpace).map(it => ({ ...it, isSettings: true }));
+			const filtered = itemsImport.concat(settingsItems).concat(pageItems).filter(it => {
+				if (it.name.match(reg)) {
+					return true;
+				};
+
+				if (it.aliases && it.aliases.length) {
+					for (const alias of it.aliases) {
+						if (alias.match(reg)) {
+							return true;
+						};
+					};
+				};
+
+				return false;
+			});
+
+			if (filtered.length) {
+				filtered.sort(UtilData.sortByName);
+				filtered.unshift({ name: translate('commonSettings'), isSection: true });
+
+				items = filtered.concat(items);
+			};
+		};
+
+		items.push({ id: 'add', name, icon: 'plus', shortcut: [ cmd, 'N' ] });
+
 		if (hasRelations) {
 			items.push({ id: 'relation', name: translate('popupSearchAddRelation'), icon: 'relation', shortcut: [ cmd, 'Shift', 'R' ] });
 		};
-		return items;
+
+		return items.map(it => {
+			it.shortcut = it.shortcut || [];
+			return it;
+		});
 	};
 
 	filterMapper (it: any) {
@@ -433,25 +551,48 @@ const PopupSearch = observer(class PopupSearch extends React.Component<I.Popup, 
 		e.stopPropagation();
 		this.props.close();
 
-		if (item.isObject) {
-			const filter = UtilCommon.regexEscape(this.getFilter());
+		const filter = this.getFilter();
+		const rootId = keyboard.getRootId();
 
+		// Object
+		if (item.isObject) {
 			UtilObject.openEvent(e, { ...item, id: item.id });
-			analytics.event('SearchResult', { index: item.index + 1, length: filter.length });
+		} else 
+
+		// Settings item
+		if (item.isSettings) {
+			window.setTimeout(() => {
+				popupStore.open('settings', { data: { page: item.id, isSpace: item.isSpace }, className: item.className });
+			}, Constant.delay.popup);
+		} else 
+
+		// Import action
+		if (item.isImport) {
+			Action.import(item.format, Constant.fileExtension.import[item.format]);
+
+		// Buttons
 		} else {
 			switch (item.id) {
 				case 'add': {
-					keyboard.pageCreate();
+					keyboard.pageCreate({ name: filter }, 'Search');
 					break;
 				};
 
 				case 'relation': {
 					$('#button-header-relation').trigger('click');
-					window.setTimeout(() => { $('#menuBlockRelationView #item-add').trigger('click'); }, Constant.delay.menu * 2);
+					window.setTimeout(() => $('#menuBlockRelationView #item-add').trigger('click'), Constant.delay.menu * 2);
+					break;
+				};
+
+				case 'graph':
+				case 'navigation': {
+					UtilObject.openEvent(e, { id: rootId, layout: item.layout });
 					break;
 				};
 			};
 		};
+
+		analytics.event('SearchResult', { index: item.index + 1, length: filter.length });
 	};
 
 	getRowHeight (item: any) {

@@ -1,8 +1,7 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
-import { Label, Title, ListObjectManager } from 'Component';
-import { analytics, C, UtilFile, I, translate, UtilCommon, Action } from 'Lib';
-import { popupStore } from 'Store';
+import { Title, ListObjectManager } from 'Component';
+import { I, translate, Action } from 'Lib';
 import Constant from 'json/constant.json';
 import Head from '../head';
 
@@ -27,12 +26,6 @@ const PopupSettingsPageStorageManager = observer(class PopupSettingsPageStorageM
 			{ type: I.SortType.Desc, relationKey: 'sizeInBytes' },
 		];
 
-        const Info = (item: any) => (
-            <React.Fragment>
-                <Label text={String(UtilFile.size(item.sizeInBytes))} />
-            </React.Fragment>
-        );
-
         return (
             <div className="wrap">
                 <Head onPage={this.onBack} name={translate('commonBack')} />
@@ -44,7 +37,7 @@ const PopupSettingsPageStorageManager = observer(class PopupSettingsPageStorageM
                     rowLength={2}
                     withArchived={true}
                     buttons={buttons}
-                    Info={Info}
+					info={I.ObjectManagerItemInfo.FileSize}
                     iconSize={18}
                     sorts={sorts}
                     filters={filters}
@@ -55,35 +48,7 @@ const PopupSettingsPageStorageManager = observer(class PopupSettingsPageStorageM
     };
 
     onRemove () {
-        if (!this.refManager) {
-            return;
-        };
-
-		const selected = this.refManager.selected || [];
-        const count = selected.length;
-
-        analytics.event('ShowDeletionWarning', { route: 'Settings' });
-
-		popupStore.open('confirm', {
-			data: {
-				title: UtilCommon.sprintf(
-					translate(`commonDeletionWarningTitle`),
-					count,
-					UtilCommon.plural(count, translate(`pluralObject`))
-				),
-				text: translate(`commonDeletionWarningText`),
-				textConfirm: translate(`commonDelete`),
-				onConfirm: () => {
-					Action.archive(selected, () => {
-						C.ObjectListDelete(selected);
-						this.selectionClear();
-
-						analytics.event('RemoveCompletely', { count, route: 'Settings' });
-					});
-				},
-				onCancel: () => this.selectionClear(),
-			},
-		});
+		Action.delete(this.refManager?.selected || [], 'Settings', () => this.selectionClear());
     };
 
 	selectionClear () {

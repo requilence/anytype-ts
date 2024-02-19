@@ -15,12 +15,13 @@ class MenuPreviewLatex extends React.Component<I.Menu> {
 			displayMode: true,
 			throwOnError: false,
 			output: 'html',
+			fleqn: true,
 			trust: (context: any) => [ '\\url', '\\href', '\\includegraphics' ].includes(context.command),
 		});
 
 		return (
 			<div>
-				<div className="math" dangerouslySetInnerHTML={{ __html: math }} />
+				<div className="math" dangerouslySetInnerHTML={{ __html: UtilCommon.sanitize(math) }} />
 				{example ? <div className="example">{UtilCommon.sprintf(translate('menuPreviewLatexExample'), text)}</div> : ''}
 			</div>
 		);

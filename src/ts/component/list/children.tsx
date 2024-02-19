@@ -33,7 +33,6 @@ const ListChildren = observer(class ListChildren extends React.Component<Props> 
 					<DropTarget 
 						{...this.props}
 						className="emptyToggle"
-						isTargetColumn={true} 
 						rootId={rootId} 
 						id={block.id} 
 						style={block.content.style} 
@@ -52,13 +51,13 @@ const ListChildren = observer(class ListChildren extends React.Component<Props> 
 		
 		const className = String(this.props.className || '').replace(/first|last/g, '');
 		const cn = [ 'children', (block.isTextToggle() ? 'canToggle' : '') ];
-		
-		let ColResize: any = (): any => null;
 		const isRow = block.isLayoutRow();
+
+		let ColResize: any = (): any => null;
 		
 		if (isRow) {
 			ColResize = (item: any) => (
-				<div className={[ 'colResize', 'c' + item.index ].join(' ')} onMouseDown={(e: any) => { onResizeStart(e, item.index); }}>
+				<div className={[ 'colResize', 'c' + item.index ].join(' ')} onMouseDown={e => onResizeStart(e, item.index)}>
 					<div className="inner">
 						<div className="line" />
 					</div>
@@ -67,7 +66,7 @@ const ListChildren = observer(class ListChildren extends React.Component<Props> 
 		};
 
 		return (
-			<div id={'block-children-' + block.id} className={cn.join(' ')} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+			<div id={`block-children-${block.id}`} className={cn.join(' ')} onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
 				{children.map((item: any, i: number) => {
 					const css: any = {};
 					const cn = [];
@@ -87,10 +86,10 @@ const ListChildren = observer(class ListChildren extends React.Component<Props> 
 					};
 
 					return (
-						<React.Fragment key={item.id}>
+						<React.Fragment key={`block-child-${item.id}`}>
 							{(i > 0) && isRow ? <ColResize index={i} /> : ''}
 							<Block 
-								key={'block-' + item.id} 
+								key={`block-${item.id}`} 
 								{...this.props} 
 								block={item} 
 								css={css} 

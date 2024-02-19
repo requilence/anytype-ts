@@ -1,13 +1,15 @@
-import { I, C, focus, analytics, Renderer, Preview, UtilCommon, Storage, UtilData, translate, Mapper } from 'Lib';
+import { I, C, focus, analytics, Renderer, Preview, UtilCommon, UtilObject, Storage, UtilData, UtilRouter, UtilMenu, translate, Mapper } from 'Lib';
 import { commonStore, authStore, blockStore, detailStore, dbStore, popupStore, menuStore } from 'Store';
 import Constant from 'json/constant.json';
 
 class Action {
 
 	pageClose (rootId: string, close: boolean) {
-		const { profile } = blockStore;
+		const { root, widgets } = blockStore;
+		const { space } = commonStore;
 
-		if (rootId == profile) {
+		// Prevent closing of system objects
+		if ([ root, widgets ].includes(rootId)) {
 			return;
 		};
 
@@ -25,7 +27,7 @@ class Action {
 		};
 
 		if (close) {
-			C.ObjectClose(rootId, onClose);
+			C.ObjectClose(rootId, space, onClose);
 		} else {
 			onClose();
 		};
@@ -76,15 +78,15 @@ class Action {
 		};
 
 		const { content } = block;
-		const { type, hash } = content;
+		const { type, targetObjectId } = content;
 
-		if (!hash) {
+		if (!targetObjectId) {
 			return;
 		};
 		
-		const url = block.isFileImage() ? commonStore.imageUrl(hash, 1000000) : commonStore.fileUrl(hash);
-		Renderer.send('download', url);
+		const url = block.isFileImage() ? commonStore.imageUrl(targetObjectId, 1000000) : commonStore.fileUrl(targetObjectId);
 
+		Renderer.send('download', url);
 		analytics.event('DownloadMedia', { type, route });
 	};
 
@@ -185,7 +187,7 @@ class Action {
 			];
 		};
 		
-		window.Electron.showOpenDialog(options).then(({ filePaths }) => {
+		UtilCommon.getElectron().showOpenDialog(options).then(({ filePaths }) => {
 			if ((typeof filePaths === 'undefined') || !filePaths.length) {
 				return;
 			};
@@ -203,7 +205,7 @@ class Action {
 			properties: [ 'openDirectory' ],
 		});
 
-		window.Electron.showOpenDialog(options).then(({ filePaths }) => {
+		UtilCommon.getElectron().showOpenDialog(options).then(({ filePaths }) => {
 			if ((filePaths == undefined) || !filePaths.length) {
 				return;
 			};
@@ -215,29 +217,33 @@ class Action {
 	};
 
 	install (object: any, showToast: boolean, callBack?: (message: any) => void) {
-		C.WorkspaceObjectAdd(object.id, (message: any) => {
+		C.WorkspaceObjectAdd(commonStore.space, object.id, (message: any) => {
 			if (message.error.code) {
 				return;
 			};
 
-			if (callBack) {
-				callBack(message);
-			};
-
 			const { details } = message;
+			const eventParam: any = { layout: object.layout };
+
 			let toast = '';
 			let subId = '';
 
-			switch (object.type) {
-				case Constant.storeTypeId.type:
+			switch (object.layout) {
+				case I.ObjectLayout.Type: {
 					toast = UtilCommon.sprintf(translate('toastObjectTypeAdded'), object.name);
 					subId = Constant.subId.type;
-					break;
 
-				case Constant.storeTypeId.relation:
+					eventParam.objectType = object.id;
+					break;
+				};
+
+				case I.ObjectLayout.Relation: {
 					toast = UtilCommon.sprintf(translate('toastRelationAdded'), object.name);
 					subId = Constant.subId.relation;
+
+					eventParam.relationKey = object.relationKey;
 					break;
+				};
 			};
 
 			if (showToast) {
@@ -245,27 +251,39 @@ class Action {
 			};
 
 			detailStore.update(subId, { id: details.id, details }, false);
-			analytics.event('ObjectInstall', { objectType: object.type, relationKey: object.relationKey });
+			analytics.event('ObjectInstall', eventParam);
+
+			if (callBack) {
+				callBack(message);
+			};
 		});
 	};
 
 	uninstall (object: any, showToast: boolean, callBack?: (message: any) => void) {
+		const eventParam: any = { layout: object.layout };
+
 		let title = '';
 		let text = '';
 		let toast = '';
 		
-		switch (object.type) {
-			case Constant.typeId.type:
-				title = translate('libActionUninstallTypeTitle');
+		switch (object.layout) {
+			case I.ObjectLayout.Type: {
+				title = UtilCommon.sprintf(translate('libActionUninstallTypeTitle'), object.name);
 				text = translate('libActionUninstallTypeText');
 				toast = UtilCommon.sprintf(translate('toastObjectTypeRemoved'), object.name);
-				break;
 
-			case Constant.typeId.relation:
-				title = translate('libActionUninstallRelationTitle');
+				eventParam.objectType = object.id;
+				break;
+			};
+
+			case I.ObjectLayout.Relation: {
+				title = UtilCommon.sprintf(translate('libActionUninstallRelationTitle'), object.name);
 				text = translate('libActionUninstallRelationText');
 				toast = UtilCommon.sprintf(translate('toastRelationRemoved'), object.name);
+
+				eventParam.relationKey = object.relationKey;
 				break;
+			};
 		};
 
 		popupStore.open('confirm', {
@@ -287,14 +305,14 @@ class Action {
 						if (showToast) {
 							Preview.toastShow({ text: toast });
 						};
-						analytics.event('ObjectUninstall', { objectType: object.type, count: 1 });
+						analytics.event('ObjectUninstall', eventParam);
 					});
 				},
 			},
 		});
 	};
 
-	delete (ids: string[], callBack?: () => void): void {
+	delete (ids: string[], route: string, callBack?: () => void): void {
 		const count = ids.length;
 
 		analytics.event('ShowDeletionWarning');
@@ -306,16 +324,25 @@ class Action {
 				textConfirm: translate('commonDelete'),
 				onConfirm: () => { 
 					C.ObjectListDelete(ids); 
-					callBack();
-					analytics.event('RemoveCompletely', { count });
+					
+					if (callBack) {
+						callBack();
+					};
+
+					analytics.event('RemoveCompletely', { count, route });
 				},
-				onCancel: () => callBack(),
+				onCancel: () => {
+					if (callBack) {
+						callBack();
+					};
+				},
 			},
 		});
 	};
 
 	restoreFromBackup (onError: (error: { code: number, description: string }) => boolean) {
-		const { walletPath } = authStore;
+		const { walletPath, networkConfig } = authStore;
+		const { mode, path } = networkConfig;
 
 		this.openFile([ 'zip' ], paths => {
 			C.AccountRecoverFromLegacyExport(paths[0], walletPath, UtilCommon.rand(1, Constant.iconCnt), (message: any) => {
@@ -323,23 +350,24 @@ class Action {
 					return;
 				};
 
-				const { accountId } = message;
+				const { accountId, spaceId } = message;
 
-				C.ObjectImport({ paths, noCollection: true }, [], false, I.ImportType.Protobuf, I.ImportMode.AllOrNothing, false, true, (message: any) => {
+				C.ObjectImport(spaceId, { paths, noCollection: true }, [], false, I.ImportType.Protobuf, I.ImportMode.AllOrNothing, false, true, false, false, (message: any) => {
 					if (onError(message.error)) {
 						return;
 					};
 
-					C.AccountSelect(accountId, walletPath, (message: any) => {
+					C.AccountSelect(accountId, walletPath, mode, path, (message: any) => {
 						if (onError(message.error) || !message.account) {
 							return;
 						};
 
-						UtilData.onAuth(message.account, { routeParam: { animate: true } }, () => {
-							window.setTimeout(() => {
-								popupStore.open('migration', { data: { type: 'import' } });
-							}, Constant.delay.popup);
+						authStore.accountSet(message.account);
+						commonStore.configSet(message.account.config, false);
 
+						UtilData.onInfo(message.account.info);
+						UtilData.onAuth({ routeParam: { animate: true } }, () => {
+							window.setTimeout(() => { popupStore.open('migration', { data: { type: 'import' } }); }, Constant.delay.popup);
 							blockStore.closeRecentWidgets();
 						});
 					});
@@ -391,7 +419,7 @@ class Action {
 
 		analytics.event('ClickImport', { type });
 
-		window.Electron.showOpenDialog(fileOptions).then((result: any) => {
+		UtilCommon.getElectron().showOpenDialog(fileOptions).then((result: any) => {
 			const paths = result.filePaths;
 			if ((paths == undefined) || !paths.length) {
 				return;
@@ -399,8 +427,19 @@ class Action {
 
 			analytics.event('ClickImportFile', { type });
 
-			C.ObjectImport(Object.assign(options || {}, { paths }), [], true, type, I.ImportMode.IgnoreErrors, false, false, (message: any) => {
+			C.ObjectImport(commonStore.space, Object.assign(options || {}, { paths }), [], true, type, I.ImportMode.IgnoreErrors, false, false, false, false, (message: any) => {
 				if (!message.error.code) {
+					if (message.collectionId) {
+						window.setTimeout(() => {
+							popupStore.open('objectManager', { 
+								data: { 
+									collectionId: message.collectionId, 
+									type: I.ObjectManagerPopup.Favorites,
+								} 
+							});
+						}, Constant.delay.popup + 10);
+					};
+
 					analytics.event('Import', { middleTime: message.middleTime, type });
 				};
 
@@ -419,7 +458,7 @@ class Action {
 				onSelectPath();
 			};
 
-			C.ObjectListExport(paths[0], ids, type, zip, nested, files, archived, json, (message: any) => {
+			C.ObjectListExport(commonStore.space, paths[0], ids, type, zip, nested, files, archived, json, (message: any) => {
 				if (message.error.code) {
 					return;
 				};
@@ -449,7 +488,6 @@ class Action {
 		const range = UtilCommon.objectCopy(focus.state.range);
 		const cmd = isCut ? 'BlockCut' : 'BlockCopy';
 		const tree = blockStore.getTree(rootId, blockStore.getBlocks(rootId));
-		const text: string[] = [];
 
 		let blocks = blockStore.unwrapTree(tree).filter(it => ids.includes(it.id));
 
@@ -464,10 +502,6 @@ class Action {
 		blocks = blocks.map((it: I.Block) => {
 			const element = blockStore.getMapElement(rootId, it.id);
 
-			if (it.type == I.BlockType.Text) {
-				text.push(String(it.content.text || ''));
-			};
-
 			if (it.type == I.BlockType.Dataview) {
 				it.content.views = dbStore.getViews(rootId, it.id);
 			};
@@ -475,7 +509,7 @@ class Action {
 			it.childrenIds = element.childrenIds;
 			return it;
 		});
-		
+
 		C[cmd](rootId, blocks, range, (message: any) => {
 			UtilCommon.clipboardCopy({
 				text: message.textSlot,
@@ -495,6 +529,107 @@ class Action {
 		});
 
 		analytics.event(isCut ? 'CutBlock' : 'CopyBlock');
+	};
+
+	removeSpace (id: string, route: string, callBack?: (message: any) => void) {
+		const { accountSpaceId } = authStore;
+		const space = UtilObject.getSpaceview();
+		const deleted = UtilObject.getSpaceviewBySpaceId(id);
+
+		if (!deleted) {
+			return;
+		};
+
+		analytics.event('ClickDeleteSpace', { route });
+
+		popupStore.open('confirm', {
+			data: {
+				title: UtilCommon.sprintf(translate('spaceDeleteWarningTitle'), deleted.name),
+				text: translate('spaceDeleteWarningText'),
+				textConfirm: translate('commonDelete'),
+				onConfirm: () => {
+					analytics.event('ClickDeleteSpaceWarning', { type: 'Delete' });
+
+					const cb = () => {
+						C.SpaceDelete(id, (message: any) => {
+							if (callBack) {
+								callBack(message);
+							};
+
+							if (!message.error.code) {
+								Preview.toastShow({ text: UtilCommon.sprintf(translate('spaceDeleteToast'), deleted.name) });
+								analytics.event('DeleteSpace', { type: deleted.spaceAccessType });
+							};
+						});
+					};
+
+					if (space.id == deleted.id) {
+						UtilRouter.switchSpace(accountSpaceId, '', cb);
+					} else {
+						cb();
+					};
+				},
+				onCancel: () => {
+					analytics.event('ClickDeleteSpaceWarning', { type: 'Cancel' });
+				}
+			},
+		});
+	};
+
+	setInterfaceLang (id: string) {
+		Renderer.send('setInterfaceLang', id);
+		analytics.event('SwitchInterfaceLanguage', { type: id });
+	};
+
+	setSpellingLang (id: string) {
+		Renderer.send('setSpellingLang', id);
+		analytics.event('AddSpellcheckLanguage', { type: id });
+	};
+
+	importUsecase (spaceId: string, id: I.Usecase, callBack?: () => void) {
+		C.ObjectImportUseCase(spaceId, id, (message: any) => {
+			blockStore.closeRecentWidgets();
+
+			if (callBack) {
+				callBack();
+			};
+		});
+	};
+
+	setIsFavorite (objectIds: string[], v: boolean, route: string) {
+		C.ObjectListSetIsFavorite(objectIds, v, () => {
+			analytics.event(v ? 'AddToFavorites' : 'RemoveFromFavorites', { count: objectIds.length, route });
+		});
+	};
+
+	createWidgetFromObject (rootId: string, objectId: string, targetId: string, position: I.BlockPosition) {
+		const object = detailStore.get(rootId, objectId);
+
+		let layout = I.WidgetLayout.Link;
+
+		if (object && !object._empty_) {
+			if (UtilObject.isFileOrSystemLayout(object.layout)) {
+				layout = I.WidgetLayout.Link;
+			} else 
+			if (UtilObject.isSetLayout(object.layout)) {
+				layout = I.WidgetLayout.Compact;
+			} else
+			if (UtilObject.isPageLayout(object.layout)) {
+				layout = I.WidgetLayout.Tree;
+			};
+		};
+
+		const limit = Number(UtilMenu.getWidgetLimits(layout)[0]?.id) || 0;
+		const newBlock = { 
+			type: I.BlockType.Link,
+			content: { 
+				targetBlockId: objectId, 
+			},
+		};
+
+		C.BlockCreateWidget(blockStore.widgets, targetId, newBlock, position, layout, limit, () => {
+			analytics.event('AddWidget', { type: layout });
+		});
 	};
 
 };

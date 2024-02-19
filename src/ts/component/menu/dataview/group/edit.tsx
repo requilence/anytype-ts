@@ -20,7 +20,7 @@ const MenuGroupEdit = observer(class MenuGroupEdit extends React.Component<I.Men
 				<div className="items">
 					{item.children.map((action: any, i: number) => {
 						if (action.isBgColor) {
-							action.inner = <div className={`inner isTag bgColor bgColor-${action.className}`} />;
+							action.inner = <div className={`inner isMultiSelect bgColor bgColor-${action.className}`} />;
 							action.icon = 'color';
 							action.checkbox = action.value == this.color;
 						};
@@ -29,8 +29,8 @@ const MenuGroupEdit = observer(class MenuGroupEdit extends React.Component<I.Men
 							<MenuItemVertical 
 								key={i} 
 								{...action} 
-								onClick={(e: any) => { this.onClick(e, action); }}
-								onMouseEnter={(e: any) => { this.onMouseEnter(e, action); }}
+								onClick={e => this.onClick(e, action)}
+								onMouseEnter={e => this.onMouseEnter(e, action)}
 							/>
 						);
 					})}
@@ -73,7 +73,7 @@ const MenuGroupEdit = observer(class MenuGroupEdit extends React.Component<I.Men
 
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 	
@@ -128,6 +128,11 @@ const MenuGroupEdit = observer(class MenuGroupEdit extends React.Component<I.Men
 		const { data } = param;
 		const { rootId, blockId, groupId, getView } = data;
 		const view = getView();
+		
+		if (!view) {
+			return;
+		};
+
 		const relation = dbStore.getRelationByKey(view.groupRelationKey);
 		const groups = dbStore.getGroups(rootId, blockId);
 		const update: any[] = [];
@@ -149,7 +154,7 @@ const MenuGroupEdit = observer(class MenuGroupEdit extends React.Component<I.Men
 			C.BlockDataviewViewUpdate(rootId, blockId, view.id, { ...view, groupBackgroundColors: true });
 		};
 
-		if ([ I.RelationType.Tag, I.RelationType.Status ].includes(relation.format)) {
+		if ([ I.RelationType.MultiSelect, I.RelationType.Select ].includes(relation.format)) {
 			const group = groups.find(it => it.id == groupId);
 			const value = Relation.getArrayValue(group.value);
 

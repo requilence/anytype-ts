@@ -1,8 +1,8 @@
 import * as React from 'react';
 import $ from 'jquery';
-import { Header, Footer, Block, Loader, Icon, Deleted } from 'Component';
+import { Header, Footer, Block, Loader, Icon, IconObject, Deleted, ObjectName } from 'Component';
 import { blockStore, detailStore } from 'Store';
-import { I, M, C, UtilCommon, UtilData, UtilObject, keyboard, Action, focus } from 'Lib';
+import { I, M, C, UtilCommon, UtilData, UtilObject, keyboard, Action, focus, UtilDate } from 'Lib';
 import { observer } from 'mobx-react';
 import Errors from 'json/error.json';
 
@@ -59,8 +59,8 @@ const PageMainHistory = observer(class PageMainHistory extends React.Component<I
 		const cover = new M.Block({ id: rootId + '-cover', type: I.BlockType.Cover, hAlign: object.layoutAlign, childrenIds: [], fields: {}, content: {} });
 		const cn = [ 'editorWrapper', check.className ];
 		const icon: any = new M.Block({ id: rootId + '-icon', type: I.BlockType.IconPage, hAlign: object.layoutAlign, childrenIds: [], fields: {}, content: {} });
-		
-		if (root && root.isObjectHuman()) {
+
+		if (root && (root.isObjectHuman() || root.isObjectParticipant())) {
 			icon.type = I.BlockType.IconUser;
 		};
 
@@ -80,6 +80,8 @@ const PageMainHistory = observer(class PageMainHistory extends React.Component<I
 
 		const Version = (item: any) => {
 			const withChildren = item.list && item.list.length;
+			const author = UtilObject.getParticipant(item.authorId);
+
 			return (
 				<React.Fragment>
 					<div 
@@ -88,15 +90,18 @@ const PageMainHistory = observer(class PageMainHistory extends React.Component<I
 						onClick={e => this.loadVersion(item.id)}
 					>
 						{withChildren ? <Icon className="arrow" onClick={e => this.toggleChildren(e, item.id)} /> : ''}
-						<div className="date">{UtilCommon.date('d F, H:i', item.time)}</div>
-						{item.authorName ? <div className="name">{item.authorName}</div> : ''}
+						<div className="date">{UtilDate.date('d F, H:i', item.time)}</div>
+						{author ? (
+							<div className="author">
+								<IconObject object={author} size={16} />
+								<ObjectName object={author} />
+							</div>
+						) : ''}
 					</div>
 
 					{withChildren ? (
-						<div id={'children-' + item.id} className="children">
-							{item.list.map((child: any, i: number) => {
-								return <Version key={i} {...child} />;
-							})}
+						<div id={`children-${item.id}`} className="children">
+							{item.list.map((child: any, i: number) => <Version key={i} {...child} />)}
 						</div>
 					) : ''}
 				</React.Fragment>
@@ -170,8 +175,8 @@ const PageMainHistory = observer(class PageMainHistory extends React.Component<I
 		sideLeft.scrollTop(this.scrollLeft);
 		sideRight.scrollTop(this.scrollRight);
 
-		sideLeft.off('scroll').scroll(() => { this.onScrollLeft(); });
-		sideRight.off('scroll').scroll(() => { this.onScrollRight(); });
+		sideLeft.off('scroll').on('scroll', () => this.onScrollLeft());
+		sideRight.off('scroll').on('scroll', () => this.onScrollRight());
 
 		blockStore.updateNumbers(rootId);
 
@@ -230,21 +235,32 @@ const PageMainHistory = observer(class PageMainHistory extends React.Component<I
 	};
 
 	onScrollRight () {
+		const { isPopup } = this.props;
 		const { versions } = this.state;
-		const win = $(window);
 		const node = $(this.node);
+		const container = UtilCommon.getPageContainer(isPopup);
+
 		const sideRight = node.find('#body > #sideRight');
 		const wrap = sideRight.find('.wrap');
 		const sections = wrap.find('.section');
+		const { wh } = UtilCommon.getWindowDimensions();
+
+		let offset = { top: 0, left: 0 };
+
+		if (isPopup && container.length) {
+			offset = container.offset();
+		};
 
 		this.scrollRight = sideRight.scrollTop();
-		if (this.scrollRight >= wrap.height() - win.height()) {
+
+		if (this.scrollRight >= wrap.height() - wh) {
 			this.loadList(versions[versions.length - 1].id);
 		};
 
 		sections.each((i: number, item: any) => {
 			item = $(item);
-			const top = item.offset().top;
+
+			const top = item.offset().top - offset.top;
 			
 			let clone = sideRight.find('.section.fix.c' + i);
 			if (top < 0) {
@@ -311,7 +327,7 @@ const PageMainHistory = observer(class PageMainHistory extends React.Component<I
 			children.css({ overflow: 'hidden', height: height });
 
 			window.setTimeout(() => { children.css({ height: 0 }); }, 15);
-			window.setTimeout(() => { children.hide(); }, 215);
+			window.setTimeout(() => children.hide(), 215);
 		} else {
 			item.addClass('expanded');
 			children.show();
@@ -425,7 +441,7 @@ const PageMainHistory = observer(class PageMainHistory extends React.Component<I
 	};
 
 	monthId (time: number) {
-		return UtilCommon.date('F Y', time);
+		return UtilDate.date('F Y', time);
 	};
 
 	resize () {

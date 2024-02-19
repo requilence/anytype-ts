@@ -2,8 +2,8 @@ import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { Icon } from 'Component';
-import { I, C, UtilData, UtilObject, UtilCommon, Onboarding, focus, keyboard, analytics, history as historyPopup, translate } from 'Lib';
-import { popupStore, detailStore, blockStore, menuStore } from 'Store';
+import { I, C, UtilData, UtilObject, UtilCommon, Onboarding, focus, keyboard, analytics, history as historyPopup, translate, Storage } from 'Lib';
+import { popupStore, detailStore, blockStore, menuStore, dbStore } from 'Store';
 import Constant from 'json/constant.json';
 
 const BlockType = observer(class BlockType extends React.Component<I.BlockComponent> {
@@ -32,8 +32,8 @@ const BlockType = observer(class BlockType extends React.Component<I.BlockCompon
 				<div 
 					id={'item-' + item.id} 
 					className="item" 
-					onClick={(e: any) => { this.onClick(e, item); }} 
-					onMouseEnter={(e: any) => { this.onOver(e, item); }} 
+					onClick={e => this.onClick(e, item)} 
+					onMouseEnter={e => this.onOver(e, item)} 
 					onMouseLeave={this.onOut}
 				>
 					{item.icon ? <Icon className={item.icon} /> : ''}
@@ -71,7 +71,7 @@ const BlockType = observer(class BlockType extends React.Component<I.BlockCompon
 	getItems () {
 		const { rootId } = this.props;
 		const object = detailStore.get(rootId, rootId, []);
-		const items = UtilData.getObjectTypesForNewObject({ withCollection: true, withSet: true, withDefault: true }).filter(it => it.id != object.type);
+		const items = UtilData.getObjectTypesForNewObject({ withCollection: true, withSet: true, limit: 5 }).filter(it => it.id != object.type);
 
 		items.push({ id: 'menu', icon: 'search', name: translate('blockTypeMyTypes') });
 
@@ -175,7 +175,7 @@ const BlockType = observer(class BlockType extends React.Component<I.BlockCompon
 			node.find('#item-' + item.id).addClass('hover');
 		};
 
-		this.isFocused = item ? true : false;
+		this.isFocused = !!item;
 	};
 
 	onMenu (e: any) {
@@ -186,7 +186,7 @@ const BlockType = observer(class BlockType extends React.Component<I.BlockCompon
 
 		menuStore.open('typeSuggest', {
 			element: `#block-${block.id} #item-menu`,
-			onOpen: () => { obj.addClass('active'); },
+			onOpen: () => obj.addClass('active'),
 			onClose: () => { 
 				obj.removeClass('active'); 
 				focus.apply();
@@ -214,29 +214,17 @@ const BlockType = observer(class BlockType extends React.Component<I.BlockCompon
 			return;
 		};
 
-		if (UtilObject.getSetTypes().includes(item.id)) {
-			this.onObjectTo(item.id);
+		if (UtilObject.getSetLayouts().includes(item.recommendedLayout)) {
+			this.onObjectTo(item.recommendedLayout);
 		} else {
-			UtilData.checkTemplateCnt([ item.id ], (cnt: number) => {
-				if (cnt) {
-					popupStore.open('template', { 
-						data: { 
-							typeId: item.id, 
-							onSelect: (template: any) => this.onCreate(item.id, template),
-							route: 'Navigation'
-						} 
-					});
-				} else {
-					this.onCreate(item.id, null);
-				};
-			});
+			this.onChange(item.id);
 		};
 	};
 
-	onObjectTo (typeId: string) {
+	onObjectTo (layout: I.ObjectLayout) {
 		const { rootId, isPopup, setLoading } = this.props;
 
-		let layout: I.ObjectLayout = null;
+		let typeId = '';
 
 		const cb = () => {
 			if (isPopup) {
@@ -245,47 +233,44 @@ const BlockType = observer(class BlockType extends React.Component<I.BlockCompon
 
 			keyboard.disableClose(true);
 			UtilObject.openAuto({ id: rootId, layout }, { replace: true });
+			keyboard.disableClose(false);
 
-			analytics.event('SelectObjectType', {
-				objectType: typeId,
-			});
+			analytics.event('SelectObjectType', { objectType: typeId, layout });
 		};
 
 		setLoading(true);
 
-		switch (typeId) {
-			case Constant.typeId.set: {
-				layout = I.ObjectLayout.Set;
+		switch (layout) {
+			case I.ObjectLayout.Set: {
+				typeId = dbStore.getSetType()?.id;
 				C.ObjectToSet(rootId, [], cb);
 				break;
 			};
 
-			case Constant.typeId.collection: {
-				layout = I.ObjectLayout.Collection;
+			case I.ObjectLayout.Collection: {
+				typeId = dbStore.getCollectionType()?.id;
 				C.ObjectToCollection(rootId, cb);
 				break;
 			};
 		};
 	};
 
-	onCreate (typeId: any, template: any) {
+	onChange (typeId: any) {
 		const { rootId, isPopup } = this.props;
-
-		if (template) {
-			C.ObjectApplyTemplate(rootId, template.id, this.onTemplate);
-		} else {
-			C.ObjectSetObjectType(rootId, typeId, this.onTemplate);
+		const type = dbStore.getTypeById(typeId);
+		if (!type) {
+			return;
 		};
 
-		Onboarding.start('objectCreationFinish', isPopup);
-
-		analytics.event('SelectObjectType', {
-			objectType: typeId,
-			layout: template?.layout,
+		C.ObjectSetObjectType(rootId, type.uniqueKey, () => {
+			C.ObjectApplyTemplate(rootId, type.defaultTemplateId || Constant.templateId.blank, this.onTemplate);
 		});
+
+		Onboarding.start('objectCreationFinish', isPopup);
+		analytics.event('SelectObjectType', { objectType: typeId });
 	};
 
-	onBlock (id: string) {
+	onBlock () {
 		const { rootId, isPopup } = this.props;
 		const block = blockStore.getFirstBlock(rootId, 1, it => it.isText());
 
@@ -304,11 +289,9 @@ const BlockType = observer(class BlockType extends React.Component<I.BlockCompon
 		const first = blockStore.getFirstBlock(rootId, 1, it => it.isText());
 
 		if (!first) {
-			C.BlockCreate(rootId, '', I.BlockPosition.Bottom, { type: I.BlockType.Text, style: I.TextStyle.Paragraph }, (message: any) => { 
-				this.onBlock(message.blockId); 
-			});
+			C.BlockCreate(rootId, '', I.BlockPosition.Bottom, { type: I.BlockType.Text, style: I.TextStyle.Paragraph }, () => this.onBlock());
 		} else {
-			this.onBlock(first.id);
+			this.onBlock();
 		};
 	};
 

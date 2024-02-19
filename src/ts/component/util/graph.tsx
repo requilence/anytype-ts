@@ -4,23 +4,16 @@ import $ from 'jquery';
 import * as d3 from 'd3';
 import { observer } from 'mobx-react';
 import { PreviewDefault } from 'Component';
-import { I, UtilCommon, UtilObject, UtilSmile, UtilFile, translate, Relation, analytics } from 'Lib';
-import { commonStore } from 'Store';
-import Colors from 'json/colors.json';
+import { I, UtilCommon, UtilObject, UtilSmile, UtilGraph, translate, analytics, keyboard, Action } from 'Lib';
+import { commonStore, menuStore } from 'Store';
+import Constant from 'json/constant.json';
+import Theme from 'json/theme.json';
 
 interface Props {
+	id?: string;
 	isPopup?: boolean;
 	rootId: string;
 	data: any;
-	onClick?: (object: any) => void;
-	onContextMenu?: (id: string, param: any) => void;
-	onContextSpaceClick?: (param: any, data: any) => void;
-	onSelect?: (id: string, related?: string[]) => void;
-};
-
-const bgColor = {
-	'': '#000',
-	dark: '#fff',
 };
 
 const Graph = observer(class Graph extends React.Component<Props> {
@@ -48,19 +41,12 @@ const Graph = observer(class Graph extends React.Component<Props> {
 	};
 
 	render () {
-		const { isPopup } = this.props;
-		const id = [ 'graph' ];
-
-		if (isPopup) {
-			id.push('popup');
-		};
-
 		return (
 			<div 
 				ref={node => this.node = node} 
 				id="graphWrapper"
 			>
-				<div id={id.join('-')} />
+				<div id={this.getId()} />
 			</div>
 		);
 	};
@@ -82,26 +68,42 @@ const Graph = observer(class Graph extends React.Component<Props> {
 		const win = $(window);
 
 		this.unbind();
-		win.on('updateGraphSettings.graph', () => { this.updateSettings(); });
-		win.on('updateGraphRoot.graph', (e: any, data: any) => { this.setRootId(data.id); });
-		win.on('updateTheme.graph', () => { this.send('updateTheme', { theme: commonStore.getThemeClass() }); });
+		win.on('updateGraphSettings.graph', () => this.updateSettings());
+		win.on('updateGraphRoot.graph', (e: any, data: any) => this.setRootId(data.id));
+		win.on('updateTheme.graph', () => this.send('updateTheme', { theme: commonStore.getThemeClass() }));
+		win.on('removeGraphNode.graph', (e: any, data: any) => this.send('onRemoveNode', { ids: UtilCommon.objectCopy(data.ids) }));
+		win.on(`keydown.graph`, e => this.onKeyDown(e));
 	};
 
 	unbind () {
-		const events = [ 'updateGraphSettings', 'updateGraphRoot', 'updateTheme' ];
+		const events = [ 'updateGraphSettings', 'updateGraphRoot', 'updateTheme', 'removeGraphNode', 'keydown' ];
 
 		$(window).off(events.map(it => `${it}.graph`).join(' '));
 	};
 
+	getId (): string {
+		const { id, isPopup } = this.props;
+		const ret = [ 'graph' ];
+
+		if (id) {
+			ret.push(id);
+		};
+		if (isPopup) {
+			ret.push('popup');
+		};
+		return ret.join('-');
+	};
+
 	init () {
-		const { data, isPopup, rootId } = this.props;
+		const { data, rootId } = this.props;
 		const node = $(this.node);
 		const density = window.devicePixelRatio;
-		const elementId = `#graph${isPopup ? '-popup' : ''}`;
+		const elementId = `#${this.getId()}`;
 		const width = node.width();
 		const height = node.height();
-	
-		this.zoom = d3.zoom().scaleExtent([ 1, 6 ]).on('zoom', e => this.onZoom(e));
+		const theme = commonStore.getThemeClass();
+
+		this.zoom = d3.zoom().scaleExtent([ 0.2, 10 ]).on('zoom', e => this.onZoom(e));
 		this.edges = (data.edges || []).map(this.edgeMapper);
 		this.nodes = (data.nodes || []).map(this.nodeMapper);
 
@@ -123,7 +125,8 @@ const Graph = observer(class Graph extends React.Component<Props> {
 			density,
 			nodes: this.nodes,
 			edges: this.edges,
-			theme: commonStore.getThemeClass(),
+			theme: theme,
+			colors: Theme[theme].graph || {},
 			settings: commonStore.graph,
 			rootId,
 		}, [ transfer ]);
@@ -138,8 +141,14 @@ const Graph = observer(class Graph extends React.Component<Props> {
 		.call(this.zoom)
 		.call(this.zoom.transform, d3.zoomIdentity.translate(0, 0).scale(1.5))
 		.on('click', (e: any) => {
+			const { local } = commonStore.graph;
 			const [ x, y ] = d3.pointer(e);
-			this.send(e.shiftKey ? 'onSelect' : 'onClick', { x, y });
+
+			if (local) {
+				this.send('onSetRootId', { x, y });
+			} else {
+				this.send(e.shiftKey ? 'onSelect' : 'onClick', { x, y });
+			};
 		})
 		.on('dblclick', (e: any) => {
 			if (e.shiftKey) {
@@ -160,12 +169,12 @@ const Graph = observer(class Graph extends React.Component<Props> {
 	nodeMapper (d: any) {
 		d.layout = Number(d.layout) || 0;
 		d.radius = 4;
-		d.src = this.imageSrc(d);
+		d.src = UtilGraph.imageSrc(d);
 
 		if (d.layout == I.ObjectLayout.Note) {
 			d.name = d.snippet || translate('commonEmpty');
 		} else {
-			d.name = d.name || UtilObject.defaultName('Page');
+			d.name = d.name || translate('defaultNamePage');
 		};
 
 		d.name = UtilSmile.strip(d.name);
@@ -257,7 +266,10 @@ const Graph = observer(class Graph extends React.Component<Props> {
 		const body = $('body');
 		const node = $(this.node);
 		const { left, top } = node.offset();
-		
+		const render = this.previewId != this.subject.id;
+
+		this.previewId = this.subject.id;
+
 		let el = $('#graphPreview');
 
 		const position = () => {
@@ -268,11 +280,13 @@ const Graph = observer(class Graph extends React.Component<Props> {
 			el.css({ left: x, top: y });
 		};
 
-		if (!el.length) {
+		if (!el.length || render) {
 			el = $('<div id="graphPreview" />');
-			body.append(el);
-			ReactDOM.render(<PreviewDefault object={this.subject} className="previewGraph" />, el.get(0), position);
 
+			body.find('#graphPreview').remove();
+			body.append(el);
+
+			ReactDOM.render(<PreviewDefault object={this.subject} className="previewGraph" />, el.get(0), position);
 			analytics.event('SelectGraphNode', { objectType: this.subject.type, layout: this.subject.layout });
 		} else {
 			position();
@@ -285,7 +299,6 @@ const Graph = observer(class Graph extends React.Component<Props> {
 
 	onMessage (e) {
 		const { id, data } = e.data;
-		const { onClick, onContextMenu, onContextSpaceClick, onSelect } = this.props;
 		const node = $(this.node);
 		const { left, top } = node.offset();
 
@@ -306,13 +319,12 @@ const Graph = observer(class Graph extends React.Component<Props> {
 
 		switch (id) {
 			case 'onClick': {
-				onClick(data.node);
+				this.onClickObject(data.node);
 				break;
 			};
 
 			case 'onSelect': {
-				const { related } = data;
-				onSelect(data.node, related);
+				this.onSelect(data.node, data.related);
 				break;
 			};
 
@@ -337,15 +349,13 @@ const Graph = observer(class Graph extends React.Component<Props> {
 				};
 
 				this.onPreviewHide();
-
-				onContextMenu(data.node.id, menuParam);
+				this.onContextMenu(data.node.id, menuParam);
 				break;
 			};
 
 			case 'onContextSpaceClick': {
 				this.onPreviewHide();
-
-				onContextSpaceClick(menuParam, data);
+				this.onContextSpaceClick(menuParam, data);
 				break;
 			};
 
@@ -359,115 +369,170 @@ const Graph = observer(class Graph extends React.Component<Props> {
 		};
 	};
 
-	imageSrc (d: any) {
-		let src = '';
+	onKeyDown (e: any) {
+		const cmd = keyboard.cmdKey();
+		const length = this.ids.length;
 
-		switch (d.layout) {
-			case I.ObjectLayout.Relation: {
-				src = `img/icon/relation/big/${Relation.typeName(d.relationFormat)}.svg`;
-				break;
-			};
+		keyboard.shortcut(`${cmd}+f`, e, () => $('#button-header-search').trigger('click'));
 
-			case I.ObjectLayout.Task: {
-				src = `img/icon/graph/task.svg`;
-				break;
-			};
+		if (length) {
+			keyboard.shortcut('escape', e, () => {
+				this.ids = [];
+				this.send('onSetSelected', { ids: [] });
+			});
 
-			case I.ObjectLayout.File: {
-				src = `img/icon/file/${UtilFile.icon(d)}.svg`;
-				break;
-			};
-
-			case I.ObjectLayout.Image: {
-				if (d.id) {
-					src = commonStore.imageUrl(d.id, 100);
-				} else {
-					src = `img/icon/file/${UtilFile.icon(d)}.svg`;
-				};
-				break;
-			};
-				
-			case I.ObjectLayout.Human: {
-				if (d.iconImage) {
-					src = commonStore.imageUrl(d.iconImage, 100);
-				} else
-				if (d.iconOption) {
-					src = this.gradientIcon(d.iconOption);
-				};
-				break;
-			};
-
-			case I.ObjectLayout.Note: {
-				break;
-			};
-
-			case I.ObjectLayout.Bookmark: {
-				if (d.iconImage) {
-					src = commonStore.imageUrl(d.iconImage, 100);
-				};
-				break;
-			};
-				
-			default: {
-				if (d.iconImage) {
-					src = commonStore.imageUrl(d.iconImage, 100);
-				} else
-				if (d.iconEmoji) {
-					const data = UtilSmile.data(d.iconEmoji);
-					if (data) {
-						src = UtilSmile.srcFromColons(data.colons, data.skin);
-					};
-					src = src.replace(/^.\//, '');
-				} else
-				if (d.iconOption) {
-					src = this.gradientIcon(d.iconOption, true);
-				};
-				break;
-			};
+			keyboard.shortcut('backspace, delete', e, () => {
+				Action.archive(this.ids, () => {
+					this.nodes = this.nodes.filter(d => !this.ids.includes(d.id));
+					this.send('onRemoveNode', { ids: this.ids });
+				});
+			});
 		};
-
-		return src;
 	};
 
-	gradientIcon (iconOption: number, small?: boolean) {
-		const option: any = Colors.gradientIcons.options[iconOption - 1];
-		if (!option) {
+	onContextMenu (id: string, param: any) {
+		const ids = this.ids.length ? this.ids : [ id ];
+
+		menuStore.open('dataviewContext', {
+			...param,
+			data: {
+				route: 'Graph',
+				subId: Constant.subId.graph,
+				objectIds: ids,
+				getObject: id => this.getNode(id),
+				allowedLink: true,
+				allowedOpen: true,
+				onLinkTo: (sourceId: string, targetId: string) => {
+					const target = this.getNode(targetId);
+					if (target) {
+						this.edges.push(this.edgeMapper({ type: I.EdgeType.Link, source: sourceId, target: targetId }));
+						this.send('onSetEdges', { edges: this.edges });
+					} else {
+						this.addNewNode(targetId, sourceId, null);
+					};
+				},
+				onSelect: (itemId: string) => {
+					switch (itemId) {
+						case 'archive': {
+							this.nodes = this.nodes.filter(d => !ids.includes(d.id));
+							this.send('onRemoveNode', { ids });
+							break;
+						};
+
+						case 'fav': {
+							ids.forEach((id: string) => {
+								const node = this.getNode(id);
+								
+								if (node) {
+									node.isFavorite = true;
+								};
+							});
+							this.send('onSetEdges', { edges: this.edges });
+							break;
+						};
+
+						case 'unfav': {
+							ids.forEach((id: string) => {
+								const node = this.getNode(id);
+								
+								if (node) {
+									node.isFavorite = false;
+								};
+							});
+							break;
+						};
+					};
+
+					this.ids = [];
+					this.send('onSetSelected', { ids: this.ids });
+				},
+			}
+		});
+	};
+
+	onContextSpaceClick (param: any, data: any) {
+		if (!UtilObject.canParticipantWrite()) {
 			return;
 		};
 
-		const theme = commonStore.getThemeClass();
-		const { from, to } = option.colors;
-		const canvas = document.createElement('canvas');
-		const ctx = canvas.getContext('2d');
-		const w = 160;
-		const r = w / 2;
-		const fillW = small ? w * 0.7 : w;
-		const fillR = fillW / 2;
-		const steps = option.steps || Colors.gradientIcons.common.steps;
-		const step0 = UtilCommon.getPercentage(fillR, steps.from * 100);
-		const step1 = UtilCommon.getPercentage(fillR, steps.to * 100);
-		const grd = ctx.createRadialGradient(r, r, step0, r, r, step1);
+		menuStore.open('select', {
+			...param,
+			data: {
+				options: [
+					{ id: 'newObject', name: translate('commonNewObject') },
+				],
+				onSelect: (e: any, item: any) => {
+					switch (item.id) {
+						case 'newObject': {
+							const flags = [ I.ObjectFlag.SelectType, I.ObjectFlag.SelectTemplate ];
 
-		canvas.width = w;
-		canvas.height = w;
-		grd.addColorStop(0, from);
-		grd.addColorStop(1, to);
+							UtilObject.create('', '', {}, I.BlockPosition.Bottom, '', {}, flags, (message: any) => {
+								UtilObject.openPopup(message.details, { onClose: () => this.addNewNode(message.targetId, '', data) });
+								analytics.event('CreateObject', { objectType: commonStore.type, route: 'Graph' });
+							});
+							break;
+						};
+					};
+				},
+			}
+		});
+	};
 
-		if (small) {
-			ctx.fillStyle = bgColor[theme];
-			ctx.fillRect(0, 0, w, w);
+	onSelect (id: string, related?: string[]) {
+		const isSelected = this.ids.includes(id);
+
+		let ids = [ id ];
+
+		if (related && related.length) {
+			if (!isSelected) {
+				this.ids = [];
+			};
+
+			ids = ids.concat(related);
 		};
 
-		ctx.fillStyle = grd;
-		ctx.beginPath();
-		ctx.arc(r, r, fillR, 0, 2 * Math.PI);
-		ctx.fill();
+		ids.forEach((id) => {
+			if (isSelected) {
+				this.ids = this.ids.filter(it => it != id);
+				return;
+			};
 
-		return canvas.toDataURL();
+			this.ids = this.ids.includes(id) ? this.ids.filter(it => it != id) : this.ids.concat([ id ]);
+		});
+
+		this.send('onSetSelected', { ids: this.ids });
+	};
+
+	onClickObject (id: string) {
+		this.ids = [];
+		this.send('onSetSelected', { ids: [] });
+		
+		UtilObject.openAuto(this.nodes.find(d => d.id == id));
+	};
+
+	addNewNode (id: string, sourceId?: string, param?: any, callBack?: (object: any) => void) {
+		UtilObject.getById(id, (object: any) => {
+			object = this.nodeMapper(object);
+
+			if (param) {
+				object = Object.assign(object, param);
+			};
+
+			this.nodes.push(object);
+			this.send('onAddNode', { target: object, sourceId });
+
+			if (callBack) {
+				callBack(object);
+			};
+		});
+	};
+
+	getNode (id: string) {
+		return this.nodes.find(d => d.id == id);
 	};
 
 	setRootId (id: string) {
-		this.send('onSetRootId', { rootId: id });
+		this.send('setRootId', { rootId: id });
 	};
 
 	send (id: string, param: any, transfer?: any[]) {

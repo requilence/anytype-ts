@@ -1,33 +1,27 @@
-import { I, translate } from 'Lib';
+import { I, Onboarding, keyboard, translate } from 'Lib';
 
 export default {
     mainGraph: () => ({
         category: translate('onboardingMainGraph'),
         items: [
             {
-                description: `
-					<p>${translate('onboardingMainGraph11')}</p>
-					<p>${translate('onboardingMainGraph12')}</p>
-				`,
+                description: translate('onboardingMainGraph11'),
                 video: './img/help/onboarding/space.mp4',
-                noButton: true,
-                buttons: [
-                    { text: translate('commonNext'), action: 'dashboard' },
-                ],
+				buttonText: translate('commonFinish'),
             }
         ],
 
-        param: {
-            element: '#page.isFull #footer #button-help',
-            classNameWrap: 'fixed',
-            className: 'wizard',
-            vertical: I.MenuDirection.Top,
-            horizontal: I.MenuDirection.Right,
-            noArrow: true,
+		param: {
+			element: '#page.isFull #footer #button-help',
+			classNameWrap: 'fixed',
+			className: 'wizard',
+			vertical: I.MenuDirection.Top,
+			horizontal: I.MenuDirection.Right,
+			noArrow: true,
 			noClose: true,
 			passThrough: true,
-            offsetY: -4,
-        },
+			offsetY: -4,
+		},
     }),
 
     mainSet: () => ({
@@ -184,28 +178,19 @@ export default {
     dashboard: () => ({
         category: translate('onboardingDashboard'),
         showConfetti: true,
+		onComplete: (force: boolean) => {
+			if (!$('#navigationPanel').hasClass('hide')) {
+				Onboarding.start('space', keyboard.isPopup(), force);
+			};
+		},
         items: [
             {
                 description: `
 					<p>${translate('onboardingDashboard11')}</p>
 					<p>${translate('onboardingDashboard12')}</p>
+					<p>${translate('onboardingDashboard13')}</p>
 				`,
                 video: './img/help/onboarding/homepage.mp4',
-            },
-            {
-                description: `
-					<p>${translate('onboardingDashboard21')}</p>
-					<p>${translate('onboardingDashboard22')}</p>
-					<p>${translate('onboardingDashboard23')}</p>
-                `,
-                video: './img/help/onboarding/sets.mp4',
-            },
-            {
-                description: `
-					<p>${translate('onboardingDashboard31')}</p>
-					<p>${translate('onboardingDashboard32')}</p>
-                `,
-                video: './img/help/onboarding/objects.mp4',
             },
             {
                 description: `
@@ -352,5 +337,101 @@ export default {
 			},
 		],
 	}),
+
+	setSettings: () => (
+		{
+			items: [
+				{
+					name: translate('onboardingDefaultTypeTitle'),
+					description: translate('onboardingDefaultTypeDescription'),
+					param: {
+						element: '#button-dataview-add-record-select',
+						horizontal: I.MenuDirection.Right,
+						offsetX: -4,
+						offsetY: 12,
+					},
+				},
+
+				{
+					name: translate('onboardingCalendarTitle'),
+					description: translate('onboardingCalendarDescription'),
+					param: {
+						element: '#button-dataview-settings',
+						horizontal: I.MenuDirection.Right,
+						offsetX: -4,
+						offsetY: 12,
+					},
+				},
+			],
+		}
+	),
+
+	templateSelect: () => (
+		{
+			items: [
+				{
+					name: translate('onboardingTemplateSelectTitle'),
+					description: translate('onboardingTemplateSelectDescription'),
+				},
+			],
+
+			param: {
+				element: '#headerBanner',
+				horizontal: I.MenuDirection.Center,
+				offsetY: 12,
+				noButton: true,
+			},
+		}
+	),
+
+	space: () => (
+		{
+			onComplete: (force: boolean) => {
+				if (!$('#navigationPanel').hasClass('hide')) {
+					Onboarding.start('quickCapture', keyboard.isPopup(), force);
+				};
+			},
+
+			items: [
+				{
+					name: translate('onboardingSpaceSelectTitle'),
+					description: translate('onboardingSpaceSelectDescription'),
+					param: {
+						element: '#navigationPanel #button-navigation-profile',
+					}
+				},
+			],
+
+			param: {
+				classNameWrap: 'fixed',
+				vertical: I.MenuDirection.Top,
+				horizontal: I.MenuDirection.Center,
+				offsetY: -24,
+				noButton: true,
+			},
+		}
+	),
+
+	quickCapture: () => (
+		{
+			items: [
+				{
+					name: translate('onboardingQuickCaptureTitle'),
+					description: translate('onboardingQuickCaptureDescription'),
+					param: {
+						element: '#navigationPanel #button-navigation-plus',
+					}
+				},
+			],
+
+			param: {
+				classNameWrap: 'fixed',
+				vertical: I.MenuDirection.Top,
+				horizontal: I.MenuDirection.Center,
+				offsetY: -24,
+				noButton: true,
+			},
+		}
+	),
 
 };

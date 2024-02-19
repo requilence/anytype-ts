@@ -1,13 +1,13 @@
 import * as React from 'react';
 import $ from 'jquery';
 import arrayMove from 'array-move';
-import { observable } from 'mobx';
 import { observer } from 'mobx-react';
 import { SortableContainer, SortableElement, SortableHandle } from 'react-sortable-hoc';
 import { AutoSizer, CellMeasurer, InfiniteLoader, List as VList, CellMeasurerCache } from 'react-virtualized';
 import { Icon } from 'Component';
-import { I, C, UtilCommon, keyboard, Relation, analytics, UtilObject, translate } from 'Lib';
+import { I, C, UtilCommon, keyboard, Relation, analytics, UtilObject, translate, UtilMenu, Dataview } from 'Lib';
 import { menuStore, dbStore, blockStore } from 'Store';
+import Constant from 'json/constant.json';
 
 const HEIGHT = 28;
 const LIMIT = 20;
@@ -46,16 +46,16 @@ const MenuViewList = observer(class MenuViewList extends React.Component<I.Menu>
 			<div 
 				id={'item-' + item.id} 
 				className="item" 
-				onClick={(e: any) => { this.onClick(e, item); }}
-				onMouseEnter={(e: any) => { this.onOver(e, item); }}
+				onClick={e => this.onClick(e, item)}
+				onMouseEnter={e => this.onOver(e, item)}
 				style={item.style}
 			>
 				{allowed ? <Handle /> : ''}
-				<div className="clickable" onClick={(e: any) => { loadData(item.id, 0); }}>
+				<div className="clickable" onClick={() => loadData(item.id, 0)}>
 					<div className="name">{item.name}</div>
 				</div>
 				<div className="buttons">
-					<Icon className="more" onClick={(e: any) => { this.onEdit(e, item); }} />
+					<Icon className="more" onClick={e => this.onViewContext(e, item)} />
 				</div>
 			</div>
 		));
@@ -146,7 +146,7 @@ const MenuViewList = observer(class MenuViewList extends React.Component<I.Menu>
 							className="item add" 
 							onClick={this.onAdd}
 							onMouseEnter={() => { this.props.setHover({ id: 'add' }); }} 
-							onMouseLeave={() => { this.props.setHover(); }}
+							onMouseLeave={() => this.props.setHover()}
 						>
 							<Icon className="plus" />
 							<div className="name">{translate('menuDataviewViewListAddView')}</div>
@@ -184,12 +184,12 @@ const MenuViewList = observer(class MenuViewList extends React.Component<I.Menu>
 
 	componentWillUnmount () {
 		this._isMounted = false;
-		menuStore.closeAll([ 'dataviewViewEdit' ]);
+		menuStore.closeAll([ 'select' ]);
 	};
 
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 	
@@ -202,7 +202,7 @@ const MenuViewList = observer(class MenuViewList extends React.Component<I.Menu>
 		const { data } = param;
 		const { rootId, blockId } = data;
 		const items: any[] = UtilCommon.objectCopy(dbStore.getViews(rootId, blockId)).map(it => ({ 
-			...it, name: it.name || UtilObject.defaultName('Page'),
+			...it, name: it.name || translate('defaultNamePage'),
 		}));
 
 		items.unshift({ id: 'label', name: translate('menuDataviewViewListViews'), isSection: true });
@@ -216,35 +216,21 @@ const MenuViewList = observer(class MenuViewList extends React.Component<I.Menu>
 	};
 
 	onAdd () {
-		const { param, getId, getSize } = this.props;
+		const { param, close } = this.props;
 		const { data } = param;
-		const { rootId, blockId, getView, loadData, getSources, isInline, getTarget } = data;
+		const { rootId, blockId, getView, getSources, isInline, getTarget, onViewSwitch } = data;
 		const view = getView();
 		const sources = getSources();
-		const relations = UtilCommon.objectCopy(view.relations);
 		const filters: I.Filter[] = [];
-		const allowed = blockStore.checkFlags(rootId, blockId, [ I.RestrictionDataview.View ]);
 		const object = getTarget();
 
-		for (const relation of relations) {
-			if (relation.isHidden || !relation.isVisible) {
-				continue;
-			};
-
-			filters.push({
-				relationKey: relation.relationKey,
-				operator: I.FilterOperator.And,
-				condition: I.FilterCondition.None,
-				value: null,
-			});
-		};
-
 		const newView = {
-			name: '',
+			name: Dataview.defaultViewName(I.ViewType.Grid),
 			type: I.ViewType.Grid,
-			groupRelationKey: Relation.getGroupOption(rootId, blockId, '')?.id,
-			filters,
+			groupRelationKey: Relation.getGroupOption(rootId, blockId, view.type, '')?.id,
 			cardSize: I.CardSize.Medium,
+			filters,
+			sorts: [],
 		};
 
 		C.BlockDataviewViewCreate(rootId, blockId, newView, sources, (message: any) => {
@@ -254,19 +240,8 @@ const MenuViewList = observer(class MenuViewList extends React.Component<I.Menu>
 
 			const view = dbStore.getView(rootId, blockId, message.viewId);
 
-			menuStore.open('dataviewViewEdit', {
-				element: `#${getId()}`,
-				offsetX: getSize().width,
-				offsetY: -getSize().height,
-				data: {
-					...data,
-					readonly: !allowed,
-					view: observable.box(view),
-					onSave: () => {
-						loadData(view.id, 0);
-					},
-				},
-			});
+			close();
+			window.setTimeout(() => onViewSwitch(view), Constant.delay.menu);
 
 			analytics.event('AddView', {
 				type: view.type,
@@ -276,25 +251,29 @@ const MenuViewList = observer(class MenuViewList extends React.Component<I.Menu>
 		});
 	};
 
-	onEdit (e: any, item: any) {
+	onViewContext (e: any, view: any) {
 		e.stopPropagation();
 
-		const { param, getId, getSize } = this.props;
+		const { param, getId, getSize, close } = this.props;
 		const { data } = param;
-		const { rootId, blockId } = data;
-		const allowed = blockStore.checkFlags(rootId, blockId, [ I.RestrictionDataview.View ]);
+		const { rootId, blockId, onViewCopy, onViewRemove } = data;
+		const element = `#${getId()} #item-${view.id}`;
 
-		menuStore.open('dataviewViewEdit', { 
-			element: `#${getId()}`,
-			offsetX: getSize().width,
-			offsetY: -getSize().height,
-			data: {
-				...data,
-				readonly: !allowed,
-				view: observable.box(item),
-				onSave: () => { this.forceUpdate(); },
+		const contextParam = {
+			rootId,
+			blockId,
+			view,
+			onCopy: onViewCopy,
+			onRemove: onViewRemove,
+			close,
+			menuParam: {
+				element,
+				offsetX: getSize().width,
+				vertical: I.MenuDirection.Center
 			}
-		});
+		};
+
+		UtilMenu.viewContextMenu(contextParam);
 	};
 
 	onClick (e: any, item: any) {

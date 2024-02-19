@@ -3,7 +3,7 @@ import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { AutoSizer, CellMeasurer, InfiniteLoader, List, CellMeasurerCache } from 'react-virtualized';
 import { Filter, Icon, MenuItemVertical, Loader } from 'Component';
-import { I, C, analytics, keyboard, UtilData, Action, UtilCommon, translate } from 'Lib';
+import { I, C, analytics, keyboard, UtilData, Action, UtilCommon, translate, Storage } from 'Lib';
 import { commonStore, detailStore, menuStore, dbStore } from 'Store';
 import Constant from 'json/constant.json';
 
@@ -60,8 +60,8 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 					<div 
 						id="item-add" 
 						className="item add" 
-						onMouseEnter={(e: any) => { this.onMouseEnter(e, item); }} 
-						onClick={(e: any) => { this.onClick(e, item); }} 
+						onMouseEnter={e => this.onMouseEnter(e, item)} 
+						onClick={e => this.onClick(e, item)} 
 						style={param.style}
 					>
 						<Icon className="plus" />
@@ -84,8 +84,8 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 						{...item}
 						className={item.isHidden ? 'isHidden' : ''}
 						style={param.style}
-						onMouseEnter={(e: any) => { this.onMouseEnter(e, item); }} 
-						onClick={(e: any) => { this.onClick(e, item); }}
+						onMouseEnter={e => this.onMouseEnter(e, item)} 
+						onClick={e => this.onClick(e, item)}
 					/>
 				);
 			};
@@ -107,10 +107,12 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 			<div className="wrap">
 				{!noFilter ? (
 					<Filter 
-						ref={ref => this.refFilter = ref} 
+						ref={ref => this.refFilter = ref}
+						className="outlined"
 						placeholderFocus={translate('menuTypeSuggestFilterTypes')}
 						value={filter}
 						onChange={this.onFilterChange} 
+						focusOnMount={true}
 					/>
 				) : ''}
 
@@ -152,9 +154,7 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 
 		this.rebind();
 		this.resize();
-		this.focus();
 		this.load(true);
-
 		this.forceUpdate();
 	};
 
@@ -179,7 +179,6 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 		});
 
 		this.resize();
-		this.focus();
 		this.props.setActive();
 	};
 	
@@ -192,17 +191,9 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 		window.clearTimeout(this.timeoutFilter);
 	};
 
-	focus () {
-		window.setTimeout(() => { 
-			if (this.refFilter) {
-				this.refFilter.focus(); 
-			};
-		}, 15);
-	};
-
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 	
@@ -227,12 +218,14 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 		const { skipIds } = data;
 		const filter = String(data.filter || '');
 		const sorts = [
-			{ relationKey: 'workspaceId', type: I.SortType.Desc },
+			{ relationKey: 'spaceId', type: I.SortType.Desc },
+			{ relationKey: 'lastUsedDate', type: I.SortType.Desc },
 			{ relationKey: 'name', type: I.SortType.Asc },
 		];
 
 		let filters: any[] = [
-			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.In, value: [ Constant.typeId.type, Constant.storeTypeId.type ] },
+			{ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.In, value: [ Constant.storeSpaceId, commonStore.space ] },
+			{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.In, value: I.ObjectLayout.Type },
 		];
 		if (data.filters) {
 			filters = filters.concat(data.filters);
@@ -249,7 +242,7 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 		UtilData.search({
 			filters,
 			sorts,
-			keys: Constant.defaultRelationKeys.concat(Constant.typeRelationKeys),
+			keys: UtilData.typeRelationKeys(),
 			fullText: filter,
 			offset: this.offset,
 			limit: Constant.limit.menuRecords,
@@ -283,12 +276,12 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 	};
 
 	getSections () {
-		const { workspace } = commonStore;
+		const { space } = commonStore;
 		const { param } = this.props;
 		const { data } = param;
 		const { filter } = data;
 		const items = UtilCommon.objectCopy(this.items || []).map(it => ({ ...it, object: it }));
-		const library = items.filter(it => (it.workspaceId == workspace));
+		const library = items.filter(it => (it.spaceId == space));
 		const librarySources = library.map(it => it.sourceObject);
 
 		let sections: any[] = [
@@ -296,7 +289,7 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 		];
 
 		if (filter) {
-			const store = items.filter(it => (it.workspaceId == Constant.storeSpaceId) && !librarySources.includes(it.id));
+			const store = items.filter(it => (it.spaceId == Constant.storeSpaceId) && !librarySources.includes(it.id));
 
 			sections = sections.concat([
 				{ id: 'store', name: translate('commonAnytypeLibrary'), children: store },
@@ -399,8 +392,8 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 				menuParam.className = className.join(' ');
 
 				let filters: I.Filter[] = [
-					{ operator: I.FilterOperator.And, relationKey: 'workspaceId', condition: I.FilterCondition.Equal, value: Constant.storeSpaceId },
-					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.storeTypeId.type },
+					{ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.Equal, value: Constant.storeSpaceId },
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Type },
 					{ operator: I.FilterOperator.And, relationKey: 'id', condition: I.FilterCondition.NotIn, value: sources },
 				];
 				if (data.filters) {
@@ -409,14 +402,13 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 
 				menuParam.data = Object.assign(menuParam.data, {
 					ignoreWorkspace: true,
-					keys: Constant.defaultRelationKeys.concat(Constant.typeRelationKeys),
+					keys: UtilData.typeRelationKeys(),
 					filters,
 					sorts: [
 						{ relationKey: 'name', type: I.SortType.Asc },
 					],
-					onSelect: (item: any) => {
-						this.onClick(e, detailStore.mapper(item));
-					},
+					onSelect: item => this.onClick(e, item),
+					dataMapper: it => detailStore.mapper(it),
 				});
 				break;
 			};
@@ -440,15 +432,15 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 		e.stopPropagation();
 
 		const cb = (item: any) => {
-			close(); 
+			close();
 
 			if (onClick) {
-				onClick(item);
+				onClick(detailStore.mapper(item));
 			};
 		};
 
 		if (item.id == 'add') {
-			C.ObjectCreateObjectType({ name: filter }, [], (message: any) => {
+			C.ObjectCreateObjectType({ name: filter }, [], commonStore.space, (message: any) => {
 				if (!message.error.code) {
 					cb(message.details);
 					analytics.event('CreateType');
@@ -458,7 +450,7 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 			if (item.isInstalled || noInstall) {
 				cb(item);
 			} else {
-				Action.install(item, true, (message: any) => { cb(message.details); });
+				Action.install(item, true, message => cb(message.details));
 			};
 		};
 	};
@@ -468,7 +460,7 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 	};
 
 	getLibrarySources () {
-		return dbStore.getTypes().filter(it => (it.workspaceId == commonStore.workspace)).map(it => it.sourceObject).filter(it => it);
+		return dbStore.getTypes().filter(it => (it.spaceId == commonStore.space)).map(it => it.sourceObject).filter(it => it);
 	};
 
 	resize () {
@@ -477,7 +469,7 @@ const MenuTypeSuggest = observer(class MenuTypeSuggest extends React.Component<I
 		const { noFilter } = data;
 		const items = this.getItems();
 		const obj = $(`#${getId()} .content`);
-		const height = Math.min(376, items.reduce((res: number, current: any) => { return res + this.getRowHeight(current); }, 16 + (!noFilter ? 44 : 0)));
+		const height = Math.min(376, items.reduce((res: number, current: any) => { return res + this.getRowHeight(current); }, 16 + (!noFilter ? 42 : 0)));
 
 		obj.css({ height });
 		position();

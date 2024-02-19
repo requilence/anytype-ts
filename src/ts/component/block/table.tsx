@@ -45,6 +45,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 		this.onCellEnter = this.onCellEnter.bind(this);
 		this.onCellLeave = this.onCellLeave.bind(this);
 		this.onCellKeyDown = this.onCellKeyDown.bind(this);
+		this.onCellKeyUp = this.onCellKeyUp.bind(this);
 		this.onOptions = this.onOptions.bind(this);
 		this.onResizeStart = this.onResizeStart.bind(this);
 		this.onDragStartRow = this.onDragStartRow.bind(this);
@@ -103,6 +104,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 											onCellEnter={this.onCellEnter}
 											onCellLeave={this.onCellLeave}
 											onCellKeyDown={this.onCellKeyDown}
+											onCellKeyUp={this.onCellKeyUp}
 											onResizeStart={this.onResizeStart}
 											onDragStartRow={this.onDragStartRow}
 											onDragStartColumn={this.onDragStartColumn}
@@ -262,7 +264,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 			component: 'select',
 			onOpen: (context: any) => {
 				menuContext = context;
-				raf(() => { this.onOptionsOpen(type, rowId, columnId, cellId); }); 
+				raf(() => this.onOptionsOpen(type, rowId, columnId, cellId)); 
 			},
 			onClose: () => {
 				menuStore.closeAll(Constant.menuIds.table);
@@ -320,7 +322,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 
 				fill = (callBack: () => void) => {
 					blockIds = this.getBlockIds(type, rowId, columnId, cellId);
-					callBack();
+					C.BlockTableRowListFill(rootId, [ rowId ], callBack);
 				};
 				break;
 			};
@@ -328,6 +330,8 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 
 		menuParam = Object.assign(menuParam, {
 			data: {
+				noScroll: true,
+				noVirtualisation: true,
 				filter: '',
 				options: options,
 				onSwitch: (e: any, item: any) => {
@@ -340,6 +344,10 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 					};
 				},
 				onOver: (e: any, item: any) => {
+					if (menuStore.isAnimating(menuContext.props.id)) {
+						return;
+					};
+
 					if (!menuContext) {
 						return;
 					};
@@ -354,7 +362,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 						offsetX: menuContext.getSize().width,
 						vertical: I.MenuDirection.Center,
 						isSub: true,
-						onOpen: (context: any) => { menuSubContext = context; },
+						onOpen: context => menuSubContext = context,
 						data: {
 							rootId, 
 							rebind: menuContext.ref.rebind,
@@ -424,7 +432,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 								options: this.optionsHAlign(),
 								value: current.hAlign,
 								onSelect: (e: any, el: any) => {
-									fill(() => { C.BlockListSetAlign(rootId, blockIds, el.id); });
+									fill(() => C.BlockListSetAlign(rootId, blockIds, el.id));
 									menuContext.close();
 								}
 							});
@@ -438,7 +446,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 								options: this.optionsVAlign(),
 								value: current.vAlign,
 								onSelect: (e: any, el: any) => {
-									fill(() => { C.BlockListSetVerticalAlign(rootId, blockIds, el.id); });
+									fill(() => C.BlockListSetVerticalAlign(rootId, blockIds, el.id));
 									menuContext.close();
 								}
 							});
@@ -449,7 +457,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 							menuId = 'blockColor';
 							menuParam.data = Object.assign(menuParam.data, {
 								onChange: (id: string) => {
-									fill(() => { C.BlockTextListSetColor(rootId, blockIds, id); });
+									fill(() => C.BlockTextListSetColor(rootId, blockIds, id));
 									menuContext.close();
 								}
 							});
@@ -460,7 +468,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 							menuId = 'blockBackground';
 							menuParam.data = Object.assign(menuParam.data, {
 								onChange: (id: string) => {
-									fill(() => { C.BlockListSetBackgroundColor(rootId, blockIds, id); });
+									fill(() => C.BlockListSetBackgroundColor(rootId, blockIds, id));
 									menuContext.close();
 								}
 							});
@@ -772,14 +780,21 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 
 		let ret = false;
 
-		keyboard.shortcut(`shift+space`, e, (pressed: string) => {
+		keyboard.shortcut(`shift+space`, e, () => {
+			e.preventDefault();
+
 			ret = true;
 			this.onOptions(e, I.BlockType.Text, rowId, columnId, id);
 		});
 
 		if (!ret) {
 			onKeyDown(e, text, marks, range, props);
+			this.framesUpdate();
 		};
+	};
+
+	onCellKeyUp (e: any, rowId: string, columnId: string, id: string, text: string, marks: I.Mark[], range: I.TextRange, props: any) {
+		this.framesUpdate();
 	};
 
 	setEditing (id: string) {
@@ -824,8 +839,8 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 
 		body.addClass('colResize');
 		win.off('mousemove.table mouseup.table');
-		win.on('mousemove.table', throttle((e: any) => { this.onResizeMove(e, id); }, 40));
-		win.on('mouseup.table', (e: any) => { this.onResizeEnd(e, id); });
+		win.on('mousemove.table', throttle(e => this.onResizeMove(e, id), 40));
+		win.on('mouseup.table', e => this.onResizeEnd(e, id));
 
 		keyboard.setResize(true);
 	};
@@ -906,11 +921,11 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 		table.css({ width: widths[idx], zIndex: 10000, position: 'fixed', left: -10000, top: -10000 });
 		node.append(table);
 
-		$(document).off('dragover').on('dragover', (e: any) => { e.preventDefault(); });
+		$(document).off('dragover').on('dragover', e => e.preventDefault());
 		e.dataTransfer.setDragImage(table.get(0), table.outerWidth(), 0);
 
-		win.on('drag.tableColumn', throttle((e: any) => { this.onDragMoveColumn(e, id); }, 40));
-		win.on('dragend.tableColumn', (e: any) => { this.onDragEndColumn(e, id); });
+		win.on('drag.tableColumn', throttle(e => this.onDragMoveColumn(e, id), 40));
+		win.on('dragend.tableColumn', e => this.onDragEndColumn(e, id));
 
 		this.initCache(I.BlockType.TableColumn);
 		this.setEditing('');
@@ -998,11 +1013,11 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 		layer.append(table);
 		table.append(clone);
 		
-		$(document).off('dragover').on('dragover', (e: any) => { e.preventDefault(); });
+		$(document).off('dragover').on('dragover', e => e.preventDefault());
 		e.dataTransfer.setDragImage(layer.get(0), 0, table.outerHeight());
 
-		win.on('drag.tableRow', throttle((e: any) => { this.onDragMoveRow(e, id); }, 40));
-		win.on('dragend.tableRow', (e: any) => { this.onDragEndRow(e, id); });
+		win.on('drag.tableRow', throttle(e => this.onDragMoveRow(e, id), 40));
+		win.on('dragend.tableRow', e => this.onDragEndRow(e, id));
 
 		this.initCache(I.BlockType.TableRow);
 		this.setEditing('');
@@ -1167,7 +1182,7 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 
 		const { rootId } = this.props;
 
-		C.BlockTableColumnMove(rootId, id, targetId, position);
+		C.BlockTableColumnMove(this.props.rootId, id, targetId, position);
 
 		$('body').removeClass('grab');
 		keyboard.disableSelection(false);
@@ -1226,10 +1241,8 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 			{ 
 				id: 'rowHeader', icon: 'table-header-row', name: translate('blockTableOptionsRowHeaderRow'), withSwitch: true, switchValue: isHeader,
 				onSwitch: (e: any, v: boolean, callBack?: () => void) => { 
-					C.BlockTableRowSetHeader(rootId, id, v, (message: any) => {
-						this.frames.forEach((it: any) => {
-							this.frameAdd(it.type, it.rowId, it.columnId, it.cellId, it.position);
-						});
+					C.BlockTableRowSetHeader(rootId, id, v, () => {
+						this.framesUpdate();
 
 						if (callBack) {
 							callBack();
@@ -1513,7 +1526,15 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 			obj = frame;
 		};
 
-		obj.css({ left: item.x, top: item.y, width: item.w, height: item.h });
+		raf(() => {
+			obj.css({ left: item.x, top: item.y, width: item.w, height: item.h });
+		});
+	};
+
+	framesUpdate () {
+		this.frames.forEach(it => {
+			this.frameAdd(it.type, it.rowId, it.columnId, it.cellId, it.position);
+		});
 	};
 
 	getClassByPosition (position: I.BlockPosition) {
@@ -1541,6 +1562,10 @@ const BlockTable = observer(class BlockTable extends React.Component<I.BlockComp
 		};
 
 		const parent = blockStore.getLeaf(rootId, element.parentId);
+		if (!parent) {
+			return;
+		};
+
 		const node = $(this.node);
 		const wrap = node.find('#scrollWrap');
 		const row = node.find('.row').first();

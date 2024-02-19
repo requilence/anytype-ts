@@ -1,19 +1,21 @@
 import * as React from 'react';
 import $ from 'jquery';
-import { Icon, Title, EmptySearch, PreviewObject, IconObject } from 'Component';
-import { I, UtilObject, translate, UtilData } from 'Lib';
-import { dbStore, menuStore } from 'Store';
+import { Icon, Title, PreviewObject, IconObject } from 'Component';
+import { C, I, UtilObject, translate, UtilData, UtilCommon, keyboard } from 'Lib';
+import { dbStore, menuStore, detailStore, commonStore } from 'Store';
 import Constant from 'json/constant.json';
+import { observer } from 'mobx-react';
 
-class MenuTemplateList extends React.Component<I.Menu> {
+const TEMPLATE_WIDTH = 230;
+
+const MenuTemplateList = observer(class MenuTemplateList extends React.Component<I.Menu> {
 
 	state = {
-		isLoading: false,
-		templateId: ''
+		loading: false
 	};
 
-	n = -1;
-	items: any = [];
+	node: any = null;
+	n = 0;
 	typeId: string = '';
 
 	constructor (props: I.Menu) {
@@ -22,33 +24,38 @@ class MenuTemplateList extends React.Component<I.Menu> {
 		this.onClick = this.onClick.bind(this);
 		this.onMore = this.onMore.bind(this);
 		this.onType = this.onType.bind(this);
-		this.reload = this.reload.bind(this);
+		this.setCurrent = this.setCurrent.bind(this);
+		this.getTemplateId = this.getTemplateId.bind(this);
+		this.updateRowLength = this.updateRowLength.bind(this);
+		this.onKeyDown = this.onKeyDown.bind(this);
+		this.rebind = this.rebind.bind(this);
 	};
 
 	render () {
-		const { param } = this.props;
+		const { param, setHover } = this.props;
 		const { data } = param;
-		const { withTypeSelect, typeId } = data;
-
-		const type = dbStore.getType(typeId);
-		const itemBlank = { id: Constant.templateId.blank, targetObjectType: typeId };
-		const itemAdd = { id: Constant.templateId.new, targetObjectType: typeId };
+		const { withTypeSelect, noTitle, typeId } = data;
+		const previewSize = data.previewSize || I.PreviewSize.Small;
+		const templateId = this.getTemplateId();
+		const items = this.getItems();
+		const type = dbStore.getTypeById(typeId);
 		const isAllowed = UtilObject.isAllowedTemplate(typeId);
 
-		const ItemBlank = () => (
-			<div
-				id={`item-${Constant.templateId.blank}`}
-				className={[ 'previewObject', 'small', 'blank', (this.isDefaultTemplate(Constant.templateId.blank) ? 'isDefault' : '') ].join(' ')}
-			>
-				<div
-					id={`item-more-${Constant.templateId.blank}`}
-					className="moreWrapper"
-					onClick={e => this.onMore(e, itemBlank)}
-				>
-					<Icon className="more" />
-				</div>
+		const ItemBlank = (item: any) => {
+			const cn = [ 'previewObject', 'blank', I.PreviewSize[previewSize].toLowerCase() ];
 
-				<div onClick={e => this.onClick(e, itemBlank)}>
+			if (item.id == templateId) {
+				cn.push('isDefault');
+			};
+
+			return (
+				<div className={cn.join(' ')}>
+					{isAllowed ? (
+						<div id={`item-more-${item.id}`} className="moreWrapper" onClick={e => this.onMore(e, item)}>
+							<Icon className="more" />
+						</div>
+					) : ''}
+
 					<div className="scroller">
 						<div className="heading">
 							<div className="name">{translate('commonBlank')}</div>
@@ -57,118 +64,203 @@ class MenuTemplateList extends React.Component<I.Menu> {
 					</div>
 					<div className="border" />
 				</div>
+			);
+		};
+
+		const ItemAdd = () => (
+			<div className="previewObject small">
+				<div className="border" />
+				<Icon className="add" />
 			</div>
 		);
 
-		return (
-			<React.Fragment>
+		const Item = (item: any) => {
+			let content = null;
 
+			if (item.id == Constant.templateId.blank) {
+				content = <ItemBlank {...item} />;
+			} else
+			if (item.id == Constant.templateId.new) {
+				content = <ItemAdd {...item} />;
+			} else {
+				content = (
+					<PreviewObject
+						className={item.id == templateId ? 'isDefault' : ''}
+						rootId={item.id}
+						size={previewSize}
+						onMore={e => this.onMore(e, item)}
+					/>
+				);
+			};
+
+			return (
+				<div 
+					id={`item-${item.id}`} 
+					className="item"
+					onClick={e => this.onClick(e, item)}
+					onMouseEnter={() => setHover(item)}
+					onMouseLeave={() => setHover(null)}
+				>
+					{content}
+				</div>
+			);
+		};
+
+		return (
+			<div ref={node => this.node = node}>
 				{withTypeSelect ? (
 					<div id="defaultType" className="select big defaultTypeSelect" onClick={this.onType}>
 						<div className="item">
 							<IconObject object={type} size={18} />
-							<div className="name">{type?.name || translate('commonObjectType')}</div>
+							<div className="name">{type?.name || translate('commonObjectType')}</div>	
 						</div>
 						<Icon className="arrow black" />
 					</div>
 				) : ''}
 
-				<Title text={translate('commonTemplates')} />
+				{!noTitle ? <Title text={translate('commonTemplates')} /> : ''}
 
-				{isAllowed ? (
-					<div className="items">
-            			<ItemBlank />
-
-						{this.items.map((item: any, i: number) => (
-							<PreviewObject
-								key={i}
-								className={this.isDefaultTemplate(item.id) ? 'isDefault' : ''}
-								rootId={item.id}
-								size={I.PreviewSize.Small}
-								onClick={e => this.onClick(e, item)}
-								onMore={e => this.onMore(e, item)}
-							/>
-						))}
-
-						<div className="previewObject small" onClick={e => this.onClick(e, itemAdd)}>
-							<div className="border" />
-							<Icon className="add" />
-						</div>
-					</div>
-				) : <EmptySearch text={translate('menuDataviewTemplateUnsupported')} />}
-			</React.Fragment>
+				<div className="items">
+					{items.map((item: any, i: number) => (
+						<Item key={i} {...item} />
+					))}
+				</div>
+			</div>
 		);
 	};
 
 	componentDidMount () {
 		this.rebind();
-		this.reload();
+		this.props.position();
+		this.load();
+	};
+
+	componentDidUpdate (): void {
+		this.props.position();
+		this.setCurrent();
+	};
+
+	componentWillUnmount () {
+		C.ObjectSearchUnsubscribe([ this.getSubId() ]);
 	};
 
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
-		window.setTimeout(() => this.props.setActive(), 15);
+		$(window).on('keydown.menu', e => this.onKeyDown(e));
 	};
 
 	unbind () {
 		$(window).off('keydown.menu');
 	};
 
-	reload () {
-		const { param } = this.props;
-		const { data } = param;
-		const { typeId, templateId, hasSources } = data;
+	onKeyDown (e: any) {
+		const { setHover, onKeyDown } = this.props;
+		const items = this.getItems();
 
-		UtilObject.checkDefaultTemplate(typeId, templateId, (res) => {
-			this.setState({ templateId: (!hasSources || !res) ? Constant.templateId.blank : templateId }, () => this.load(true));
+		let ret = false;
+
+		keyboard.shortcut('arrowup, arrowleft, arrowdown, arrowright', e, (pressed: string) => {
+			e.preventDefault();
+
+			const dir = [ 'arrowup', 'arrowleft' ].includes(pressed) ? -1 : 1;
+
+			this.n += dir;
+
+			if (this.n < 0) {
+				this.n = items.length - 1;
+			};
+
+			if (this.n > items.length - 1) {
+				this.n = 0;
+			};
+
+			setHover(items[this.n], true);
+			ret = true;
 		});
+
+		if (!ret) {
+			onKeyDown(e);
+		};
 	};
 
-	load (clear: boolean, callBack?: (message: any) => void) {
+	setCurrent () {
+		const { param } = this.props;
+		const { data } = param;
+		const { templateId } = data;
+		const items = this.getItems();
+
+		this.n = items.findIndex(it => it.id == templateId);
+		this.rebind();
+	};
+
+	load () {
 		const { param } = this.props;
 		const { data } = param;
 		const { typeId } = data;
+		const templateType = dbStore.getTemplateType();
 
-		if (clear) {
-			this.setState({ loading: true });
-		};
+		const filters: I.Filter[] = [
+			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: templateType?.id },
+			{ operator: I.FilterOperator.And, relationKey: 'targetObjectType', condition: I.FilterCondition.In, value: typeId },
+		];
+		const sorts = [
+			{ relationKey: 'name', type: I.SortType.Asc },
+		];
+		const keys = Constant.defaultRelationKeys.concat([ 'targetObjectType' ]);
 
-		UtilData.getTemplatesByTypeId(typeId, (message) => {
-			if (message.error.code) {
-				return;
-			};
-
-			if (callBack) {
-				callBack(message);
-			};
-
-			if (clear) {
-				this.items = [];
-			};
-
-			this.items = this.items.concat((message.records || []).map((it: any) => {
-				it.name = String(it.name || UtilObject.defaultName('Page'));
-				return it;
-			}));
-
-			if (clear) {
-				this.setState({ loading: false });
-			} else {
-				this.forceUpdate();
-			};
-		});
+		UtilData.searchSubscribe({
+			subId: this.getSubId(),
+			filters,
+			sorts,
+			keys,
+			ignoreHidden: true,
+			ignoreDeleted: true,
+		}, this.setCurrent);
 	};
 
-	onMore (e: any, item: any) {
+	getSubId () {
+		return [ this.props.getId(), 'data' ].join('-');
+	};
+
+	getTemplateId () {
 		const { param } = this.props;
 		const { data } = param;
-		const { onSetDefault, route, typeId } = data;
-		const { templateId } = this.state;
-		const node = $(`#item-${item.id}`)
+		const { getView, templateId } = data;
+
+		return (getView ? getView().defaultTemplateId || templateId : templateId) || Constant.templateId.blank;
+	};
+
+	getItems () {
+		const { param } = this.props;
+		const { data } = param;
+		const { noAdd, typeId } = data;
+		const subId = this.getSubId();
+		const items = dbStore.getRecords(subId, '').map(id => detailStore.get(subId, id));
+		const isAllowed = UtilObject.isAllowedTemplate(typeId);
+
+		items.unshift({ id: Constant.templateId.blank });
+
+		if (!noAdd && isAllowed) {
+			items.push({ id: Constant.templateId.new });
+		};
+
+		return items;
+	};
+
+	onMore (e: any, template: any) {
+		const { param, getId } = this.props;
+		const { data } = param;
+		const { onSetDefault, route, typeId, getView } = data;
+		const item = UtilCommon.objectCopy(template);
+		const node = $(`#item-${item.id}`);
+		const templateId = this.getTemplateId();
 
 		e.preventDefault();
 		e.stopPropagation();
+
+		if (!item.targetObjectType) {
+			item.targetObjectType = typeId;
+		};
 
 		if (menuStore.isOpen('dataviewTemplateContext', item.id)) {
 			menuStore.close('dataviewTemplateContext');
@@ -178,7 +270,7 @@ class MenuTemplateList extends React.Component<I.Menu> {
 		menuStore.closeAll(Constant.menuIds.dataviewTemplate, () => {
 			menuStore.open('dataviewTemplateContext', {
 				menuKey: item.id,
-				element: `#item-${item.id} #item-more-${item.id}`,
+				element: `#${getId()} #item-more-${item.id}`,
 				vertical: I.MenuDirection.Bottom,
 				horizontal: I.MenuDirection.Right,
 				subIds: Constant.menuIds.dataviewTemplate,
@@ -189,31 +281,40 @@ class MenuTemplateList extends React.Component<I.Menu> {
 					node.removeClass('active');
 				},
 				data: {
+					rebind: this.rebind,
 					template: item,
-					isView: true,
+					isView: !!getView,
 					typeId,
 					templateId,
 					route,
-					onArchive: this.reload,
-					onDuplicate: (object) => UtilObject.openPopup(object, {}),
-					onSetDefault: onSetDefault ? () => onSetDefault(item, this.reload) : null,
+					onDuplicate: object => UtilObject.openPopup(object, {}),
+					onSetDefault,
 				}
 			});
 		});
 	};
 
-	onClick (e: any, item: any) {
+	onClick (e: any, template: any) {
 		const { param } = this.props;
 		const { data } = param;
-		const { onSelect } = data;
+		const { onSelect, typeId } = data;
+		const item = UtilCommon.objectCopy(template);
+
+		if (!item.targetObjectType) {
+			item.targetObjectType = typeId;
+		};
+
+		if (item.id != Constant.templateId.new) {
+			data.templateId = item.id;
+		};
 
 		if (onSelect) {
-			onSelect(item, this.reload);
+			onSelect(item);
 		};
 	};
 
 	onType () {
-		const { getId, param } = this.props;
+		const { id, getId, param } = this.props;
 		const { data } = param;
 		const { onTypeChange } = data;
 
@@ -221,32 +322,57 @@ class MenuTemplateList extends React.Component<I.Menu> {
 			element: `#${getId()} #defaultType`,
 			horizontal: I.MenuDirection.Right,
 			data: {
+				rebind: this.rebind,
 				filter: '',
 				filters: [
-					{ operator: I.FilterOperator.And, relationKey: 'recommendedLayout', condition: I.FilterCondition.In, value: UtilObject.getPageLayouts() },
+					{ operator: I.FilterOperator.And, relationKey: 'recommendedLayout', condition: I.FilterCondition.In, value: UtilObject.getPageLayouts().concat(UtilObject.getSetLayouts()) },
 				],
-				onClick: (item) => {
-					const type = dbStore.getType(item.id);
-					if (!type) {
-						return;
+				onClick: type => {
+					data.typeId = type.id;
+					data.templateId = type.defaultTemplateId || Constant.templateId.blank;
+
+					this.load();
+
+					if (onTypeChange) {
+						onTypeChange(type.id);
 					};
-
-					window.setTimeout(() => {
-						menuStore.updateData(this.props.id, { typeId: item.id });
-						this.reload();
-
-						if (onTypeChange) {
-							onTypeChange(item.id, this.reload);
-						};
-					}, type.isInstalled ? 0 : 50);
 				},
 			}
 		});
 	};
 
-	isDefaultTemplate (id: string): boolean {
-    	return id == this.state.templateId;
+	updateRowLength (n: number) {
+		const node = $(this.node);
+		const items = node.find('.items');
+
+		items.css({ 'grid-template-columns': `repeat(${n}, 1fr)` });
 	};
-};
+
+	beforePosition () {
+		const { param, getId } = this.props;
+		const { data } = param;
+		const { fromBanner } = data;
+
+		if (!fromBanner) {
+			return;
+		};
+
+		const obj = $(`#${getId()}`);
+		const list = obj.find('.items');
+		const items = this.getItems();
+		const length = items.length;
+		const isPopup = keyboard.isPopup();
+		const container = UtilCommon.getPageContainer(isPopup);
+		const ww = container.width();
+
+		let columns = Math.max(1, Math.floor(ww / TEMPLATE_WIDTH));
+		if (columns > length) {
+			columns = length;
+		};
+
+		list.css({ 'grid-template-columns': `repeat(${columns}, 1fr)` });
+	};
+
+});
 
 export default MenuTemplateList;

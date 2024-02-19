@@ -3,7 +3,6 @@ import $ from 'jquery';
 import { I, UtilCommon, Preview } from 'Lib';
 import Constant from 'json/constant.json';
 
-
 class MenuStore {
 
     public menuList: I.Menu[] = [];
@@ -79,7 +78,7 @@ class MenuStore {
 		if (idx >= 0) {
 			set(this.menuList[idx], { id: newId, param });
 		} else {
-			this.menuList.push({ id: newId, param })
+			this.menuList.push({ id: newId, param });
 		};
 	};
 
@@ -91,7 +90,7 @@ class MenuStore {
 		if (!id) {
 			let length = 0;
 			if (filter) {
-				length = this.menuList.filter(it => filter ? !filter.includes(it.id) : true).length;
+				length = this.menuList.filter(it => filter ? !filter.includes(it.id) && !filter.includes(it.param.component) : true).length;
 			} else {
 				length = this.menuList.length;
 			};
@@ -127,7 +126,7 @@ class MenuStore {
 		const { param } = item;
 		const { noAnimation, subIds, onClose } = param;
 		const t = noAnimation ? 0 : Constant.delay.menu;
-		const el = $('#' + UtilCommon.toCamelCase('menu-' + id));
+		const el = $(`#${UtilCommon.toCamelCase(`menu-${id}`)}`);
 
 		if (subIds && subIds.length) {
 			this.closeAll(subIds);
@@ -144,7 +143,7 @@ class MenuStore {
 			if (onClose) {
 				onClose();
 			};
-			
+
 			if (callBack) {
 				callBack();
 			};
@@ -165,11 +164,18 @@ class MenuStore {
 	};
 
 	isAnimating (id: string): boolean {
-		return this.isAnimatingFlag.get(id);
+		return !!this.isAnimatingFlag.get(id);
 	};
 
     closeAll (ids?: string[], callBack?: () => void) {
 		const items = this.getItems(ids);
+		if (!items.length) {
+			if (callBack) {
+				callBack();
+			};
+			return;
+		};
+
 		const timeout = this.getTimeout(items);
 
 		items.filter(it => !it.param.noClose).forEach(it => this.close(it.id));
@@ -219,6 +225,12 @@ class MenuStore {
 
 	checkKey (key: string) {
 		return this.menuList.find(it => it.param.menuKey == key) ? true : false;
+	};
+
+	resizeAll () {
+		const win = $(window);
+
+		this.list.forEach(it => win.trigger(`resize.${UtilCommon.toCamelCase(`menu-${it.id}`)}`));
 	};
 
 };

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Icon } from 'Component';
 import { I, UtilObject, UtilData, keyboard, sidebar, translate } from 'Lib';
-import { commonStore, menuStore } from 'Store';
+import { commonStore } from 'Store';
 
 class HeaderMainGraph extends React.Component<I.HeaderComponent> {
 
@@ -25,13 +25,13 @@ class HeaderMainGraph extends React.Component<I.HeaderComponent> {
 			<React.Fragment>
 				<div className="side left">
 					<Icon
-						className="toggle big"
+						className="toggle"
 						tooltip={translate('sidebarToggle')}
 						tooltipCaption={`${cmd} + \\, ${cmd} + .`}
 						tooltipY={I.MenuDirection.Bottom}
 						onClick={() => sidebar.toggleExpandCollapse()}
 					/>
-					<Icon className="expand big" tooltip={translate('commonOpenObject')} onClick={this.onOpen} />
+					<Icon className="expand" tooltip={translate('commonOpenObject')} onClick={this.onOpen} />
 				</div>
 
 				<div className="side center">
@@ -51,9 +51,9 @@ class HeaderMainGraph extends React.Component<I.HeaderComponent> {
 				</div>
 
 				<div className="side right">
-					<Icon id="button-header-search" className="btn-search big" tooltip={translate('headerGraphTooltipSearch')} onClick={this.onSearch} />
-					<Icon id="button-header-filter" className="btn-filter big dn" tooltip={translate('headerGraphTooltipFilters')} onClick={this.onFilter} />
-					<Icon id="button-header-settings" className="btn-settings big" tooltip={translate('headerGraphTooltipSettings')} onClick={this.onSettings} />
+					<Icon id="button-header-search" className="btn-search" tooltip={translate('headerGraphTooltipSearch')} onClick={this.onSearch} />
+					<Icon id="button-header-filter" className="btn-filter dn" tooltip={translate('headerGraphTooltipFilters')} onClick={this.onFilter} />
+					<Icon id="button-header-settings" className="btn-settings" tooltip={translate('headerGraphTooltipSettings')} onClick={this.onSettings} />
 				</div>
 			</React.Fragment>
 		);
@@ -69,9 +69,7 @@ class HeaderMainGraph extends React.Component<I.HeaderComponent> {
 
 	onSearch () {
 		const { graph } = commonStore;
-		const menuParam = Object.assign({
-			element: '#button-header-search',
-			className: 'fromHeader',
+		const menuParam = {
 			horizontal: I.MenuDirection.Right,
 			data: {
 				rootId: this.rootId,
@@ -87,18 +85,16 @@ class HeaderMainGraph extends React.Component<I.HeaderComponent> {
 					commonStore.graphSet({ filter: v });
 				},
 			}
-		});
+		};
 
-		menuStore.open('searchObject', menuParam);
+		this.props.menuOpen('searchObject', '#button-header-search', menuParam);
 	};
 
 	onFilter () {
 	};
 
 	onSettings () {
-		const { menuOpen } = this.props;
-
-		menuOpen('graphSettings', '#button-header-settings', { horizontal: I.MenuDirection.Right });
+		this.props.menuOpen('graphSettings', '#button-header-settings', { horizontal: I.MenuDirection.Right });
 	};
 
 	setRootId (id: string) {

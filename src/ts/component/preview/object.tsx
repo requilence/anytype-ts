@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
-import { Loader, IconObject, Cover, Icon } from 'Component';
+import { Loader, IconObject, Cover, Icon, ObjectType } from 'Component';
 import { commonStore, detailStore, blockStore } from 'Store';
-import { I, C, UtilData, Action, translate, UtilCommon } from 'Lib';
+import { I, C, UtilData, UtilRouter, Action, translate } from 'Lib';
 import Constant from 'json/constant.json';
 import $ from 'jquery';
 
@@ -12,6 +12,8 @@ interface Props {
 	className?: string;
 	onMore? (e: any): void;
 	onClick? (e: any): void;
+	onMouseEnter? (e: any): void;
+	onMouseLeave? (e: any): void;
 	position?: () => void;
 	setObject?: (object: any) => void;
 };
@@ -53,8 +55,6 @@ const PreviewObject = observer(class PreviewObject extends React.Component<Props
 		const check = UtilData.checkDetails(contextId, rootId);
 		const object = detailStore.get(contextId, rootId);
 		const { name, description, coverType, coverId, coverX, coverY, coverScale, iconImage } = object;
-		const author = detailStore.get(contextId, object.creator, []);
-		const type = detailStore.get(contextId, object.type, []);
 		const childBlocks = blockStore.getChildren(contextId, rootId, it => !it.isLayoutHeader()).slice(0, 10);
 		const isTask = object.layout == I.ObjectLayout.Task;
 		const isBookmark = object.layout == I.ObjectLayout.Bookmark;
@@ -92,8 +92,8 @@ const PreviewObject = observer(class PreviewObject extends React.Component<Props
 		cn.push(cnPreviewSize);
 
 		if (isTask || isBookmark) {
-			size = 20;
-			iconSize = 18;
+			size = 16;
+			iconSize = 16;
 
 			if (previewSize == I.PreviewSize.Small) {
 				size = 14;
@@ -103,7 +103,7 @@ const PreviewObject = observer(class PreviewObject extends React.Component<Props
 
 		const Block = (item: any) => {
 			const { content, fields } = item;
-			const { text, style, checked } = content;
+			const { text, style, checked, targetObjectId } = content;
 			const childBlocks = blockStore.getChildren(contextId, item.id);
 			const length = childBlocks.length;
 			const cn = [ 'element', UtilData.blockClass(item), item.className ];
@@ -236,7 +236,7 @@ const PreviewObject = observer(class PreviewObject extends React.Component<Props
 								css.width = (fields.width * 100) + '%';
 							};
 
-							inner = <img className="media" src={commonStore.imageUrl(content.hash, Constant.size.image)} style={css} />;
+							inner = <img className="media" src={commonStore.imageUrl(targetObjectId, Constant.size.image)} style={css} />;
 							break;
 						};
 
@@ -333,7 +333,6 @@ const PreviewObject = observer(class PreviewObject extends React.Component<Props
 		return (
 			<div
 				ref={node => this.node = node}
-				id={`item-${rootId}`}
 				className={cn.join(' ')}
 				onMouseEnter={this.onMouseEnter}
 				onMouseLeave={this.onMouseLeave}
@@ -351,16 +350,7 @@ const PreviewObject = observer(class PreviewObject extends React.Component<Props
 								<div className="heading">
 									<IconObject size={size} iconSize={iconSize} object={object} />
 									<div className="name">{name}</div>
-									<div className="description">{description}</div>
-									<div className="featured">
-										{!type._empty_ && !type.isDeleted ? UtilCommon.shorten(type.name, 32) : (
-											<span className="textColor-red">
-												{translate('commonDeletedType')}
-											</span>
-										)}
-										<div className="bullet" />
-										{author.name}
-									</div>
+									<div className="featured" />
 								</div>
 
 								<div className="blocks">
@@ -432,11 +422,23 @@ const PreviewObject = observer(class PreviewObject extends React.Component<Props
 	};
 
 	onMouseEnter (e: any) {
+		const { onMouseEnter } = this.props;
+
+		if (onMouseEnter) {
+			onMouseEnter(e);
+		};
+
 		$(this.node).addClass('hover');
 	};
 
 	onMouseLeave (e: any) {
-		 $(this.node).removeClass('hover');
+		const { onMouseLeave } = this.props;
+
+		if (onMouseLeave) {
+			onMouseLeave(e);
+		};
+
+		$(this.node).removeClass('hover');
 	};
 
 	load () {
@@ -451,7 +453,7 @@ const PreviewObject = observer(class PreviewObject extends React.Component<Props
 		this.id = rootId;
 		this.setState({ loading: true });
 
-		C.ObjectShow(rootId, 'preview', () => {
+		C.ObjectShow(rootId, 'preview', UtilRouter.getRouteSpaceId(), () => {
 			if (!this._isMounted) {
 				return;
 			};

@@ -5,7 +5,7 @@ import { observer } from 'mobx-react';
 import { getRange, setRange } from 'selection-ranges';
 import { DragBox } from 'Component';
 import { I, Relation, UtilObject, translate, UtilCommon, keyboard, analytics } from 'Lib';
-import { menuStore, detailStore } from 'Store';
+import { menuStore, detailStore, dbStore } from 'Store';
 import ItemObject from './item/object';
 import Constant from 'json/constant.json';
 
@@ -34,22 +34,22 @@ const CellObject = observer(class CellObject extends React.Component<I.Cell, Sta
 		this.onInput = this.onInput.bind(this);
 		this.onFocus = this.onFocus.bind(this);
 		this.onBlur = this.onBlur.bind(this);
-		this.focus = this.focus.bind(this);
 		this.onDragEnd = this.onDragEnd.bind(this);
+		this.focus = this.focus.bind(this);
 	};
 
 	render () {
 		const { isEditing } = this.state;
-		const { getRecord, recordId, relation, iconSize, elementMapper, arrayLimit, readonly } = this.props;
-		const record = getRecord(recordId);
+		const { record, relation, iconSize, elementMapper, arrayLimit, readonly } = this.props;
 		const cn = [ 'wrap' ];
 
 		if (!relation || !record) {
 			return null;
 		};
 
-		const placeholder = this.props.placeholder || translate(`placeholderCell${relation.format}`);
 		let value = this.getItems();
+
+		const placeholder = this.props.placeholder || translate(`placeholderCell${relation.format}`);
 		const length = value.length;
 
 		if (arrayLimit) {
@@ -170,7 +170,7 @@ const CellObject = observer(class CellObject extends React.Component<I.Cell, Sta
 			this.setState({ isEditing: v });
 
 			if (v) {
-				window.setTimeout(() => { this.focus(); }, 15);
+				window.setTimeout(() => this.focus(), 15);
 			};
 		};
 	};
@@ -182,7 +182,8 @@ const CellObject = observer(class CellObject extends React.Component<I.Cell, Sta
 		};
 
 		// Template type is disabled for opening
-		const canOpen = this.props.canOpen && (item.id != Constant.typeId.template);
+		const templateType = dbStore.getTemplateType();
+		const canOpen = this.props.canOpen && (item.id != templateType.id);
 
 		if (canOpen) {
 			e.stopPropagation();
@@ -214,8 +215,7 @@ const CellObject = observer(class CellObject extends React.Component<I.Cell, Sta
 	};
 
 	getItems (): any[] {
-		const { relation, getRecord, recordId, subId } = this.props;
-		const record = getRecord(recordId);
+		const { relation, record, subId } = this.props;
 
 		if (!relation || !record) {
 			return [];
@@ -223,7 +223,8 @@ const CellObject = observer(class CellObject extends React.Component<I.Cell, Sta
 
 		let value: any[] = Relation.getArrayValue(record[relation.relationKey]);
 		value = value.map(id => detailStore.get(subId, id, []));
-		value = value.filter(it => !it._empty_);
+		value = value.filter(it => !it._empty_ && !it.isArchived && !it.isDeleted);
+
 		return value;
 	};
 
@@ -259,8 +260,9 @@ const CellObject = observer(class CellObject extends React.Component<I.Cell, Sta
 		
 		value = UtilCommon.arrayUnique(value);
 
-		if (maxCount && value.length > maxCount) {
-			value = value.slice(value.length - maxCount, value.length);
+		const length = value.length;
+		if (maxCount && (length > maxCount)) {
+			value = value.slice(length - maxCount, length);
 		};
 
 		if (onChange) {
@@ -370,15 +372,7 @@ const CellObject = observer(class CellObject extends React.Component<I.Cell, Sta
 		};
 
 		const { relation } = this.props;
-		const typeId = relation.objectTypes.length ? relation.objectTypes[0] : '';
-		const details: any = { name: text };
-		const flags: I.ObjectFlag[] = [];
-
-		if (typeId) {
-			details.type = typeId;
-		} else {
-			flags.push(I.ObjectFlag.SelectType);
-		};
+		const { details, flags } = Relation.getParamForNewObject(text, relation);
 
 		UtilObject.create('', '', details, I.BlockPosition.Bottom, '', {}, flags, (message: any) => {
 			if (!message.error.code) {
@@ -431,8 +425,7 @@ const CellObject = observer(class CellObject extends React.Component<I.Cell, Sta
 	};
 
 	resize () {
-		const win = $(window);
-		win.trigger('resize.menuDataviewObjectList');
+		$(window).trigger('resize.menuDataviewObjectList');
 	};
 
 });

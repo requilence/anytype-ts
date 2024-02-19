@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Icon } from 'Component';
+import { Icon, Label } from 'Component';
 import { I, UtilCommon, translate } from 'Lib';
 import { observer } from 'mobx-react';
 
@@ -12,8 +12,7 @@ const CellCheckbox = observer(class CellCheckbox extends React.Component<I.Cell>
 	};
 
 	render () {
-		const { recordId, getRecord, withLabel, relation } = this.props;
-		const record = getRecord(recordId);
+		const { withLabel, withName, relation, record } = this.props;
 		
 		if (!record) {
 			return null;
@@ -26,22 +25,24 @@ const CellCheckbox = observer(class CellCheckbox extends React.Component<I.Cell>
 			cn.push('active');
 		};
 
-		let label = null;
+		let label = '';
 		if (withLabel) {
-			label = <span className="label">{UtilCommon.sprintf(translate(`relationCheckboxLabel${Number(value)}`), relation.name)}</span>;
+			label = UtilCommon.sprintf(translate(`relationCheckboxLabel${Number(value)}`), relation.name);
+		} else
+		if (withName) {
+			label = relation.name;
 		};
 
 		return (
 			<React.Fragment>
 				<Icon className={cn.join(' ')} />
-				{label}
+				{label ? <Label text={label} /> : ''}
 			</React.Fragment>
 		);
 	};
 
 	getValue () {
-		const { relation, getRecord, recordId } = this.props;
-		const record = getRecord(recordId);
+		const { relation, record } = this.props;
 
 		return Boolean(record[relation.relationKey]);
 	};

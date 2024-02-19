@@ -3,10 +3,10 @@ import $ from 'jquery';
 import raf from 'raf';
 import { observer } from 'mobx-react';
 import { Header, Footer, Loader, Block, Deleted } from 'Component';
-import { I, M, C, UtilData, UtilCommon, Action, UtilObject, keyboard, analytics, Preview } from 'Lib';
-import { blockStore, detailStore, popupStore, dbStore } from 'Store';
-import Controls from 'Component/page/head/controls';
-import HeadSimple from 'Component/page/head/simple';
+import { I, M, C, UtilData, UtilCommon, Action, UtilObject, keyboard, UtilRouter, translate } from 'Lib';
+import { blockStore, detailStore, dbStore, menuStore } from 'Store';
+import Controls from 'Component/page/elements/head/controls';
+import HeadSimple from 'Component/page/elements/head/simple';
 import Errors from 'json/error.json';
 import Constant from 'json/constant.json';
 
@@ -22,6 +22,7 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 	id = '';
 	refHeader: any = null;
 	refHead: any = null;
+	refControls: any = null;
 	loading = false;
 	composition = false;
 	timeout = 0;
@@ -53,18 +54,22 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 			content = <Loader id="loader" />;
 		} else {
 			const object = detailStore.get(rootId, rootId, []);
-			const isCollection = object.type === Constant.typeId.collection;
-
+			const isCollection = object.layout == I.ObjectLayout.Collection;
 			const children = blockStore.getChildren(rootId, rootId, it => it.isDataview());
 			const cover = new M.Block({ id: rootId + '-cover', type: I.BlockType.Cover, childrenIds: [], fields: {}, content: {} });
+			const placeholder = isCollection ? translate('defaultNameCollection') : translate('defaultNameSet');
 
 			content = (
 				<React.Fragment>
 					{check.withCover ? <Block {...this.props} key={cover.id} rootId={rootId} block={cover} /> : ''}
 
 					<div className="blocks wrapper">
-						<Controls key="editorControls" {...this.props} rootId={rootId} resize={this.resize} />
-						<HeadSimple ref={ref => this.refHead = ref} type={isCollection ? 'Collection' : 'Set'} rootId={rootId} />
+						<Controls ref={ref => this.refControls = ref} key="editorControls" {...this.props} rootId={rootId} resize={this.resize} />
+						<HeadSimple 
+							{...this.props} 
+							ref={ref => this.refHead = ref} 
+							placeholder={placeholder} rootId={rootId} 
+						/>
 
 						{children.map((block: I.Block, i: number) => (
 							<Block
@@ -76,6 +81,7 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 								block={block}
 								className="noPlus"
 								isSelectionDisabled={true}
+								readonly={this.isReadonly()}
 							/>
 						))}
 					</div>
@@ -130,8 +136,8 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 
 		this.unbind();
 
-		win.on('keydown.set' + namespace, e => this.onKeyDown(e));
-		container.on('scroll.set' + namespace, e => this.onScroll());
+		win.on(`keydown.set${namespace}`, e => this.onKeyDown(e));
+		container.on(`scroll.set${namespace}`, () => this.onScroll());
 	};
 
 	checkDeleted () {
@@ -159,10 +165,11 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 			return;
 		};
 
+		this.close();
 		this.id = rootId;
 		this.setState({ isDeleted: false, isLoading: true });
 
-		C.ObjectOpen(rootId, '', (message: any) => {
+		C.ObjectOpen(rootId, '', UtilRouter.getRouteSpaceId(), (message: any) => {
 			if (message.error.code) {
 				if (message.error.code == Errors.Code.NOT_FOUND) {
 					this.setState({ isDeleted: true, isLoading: false });
@@ -183,9 +190,11 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 			if (this.refHeader) {
 				this.refHeader.forceUpdate();
 			};
-
 			if (this.refHead) {
 				this.refHead.forceUpdate();
+			};
+			if (this.refControls) {
+				this.refControls.forceUpdate();
 			};
 
 			this.resize();
@@ -193,15 +202,18 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 	};
 
 	close () {
+		if (!this.id) {
+			return;
+		};
+
 		const { isPopup, match } = this.props;
-		const rootId = this.getRootId();
 		
 		let close = true;
-		if (isPopup && (match.params.id == rootId)) {
+		if (isPopup && (match.params.id == this.id)) {
 			close = false;
 		};
 		if (close) {
-			Action.pageClose(rootId, true);
+			Action.pageClose(this.id, true);
 		};
 	};
 
@@ -213,7 +225,7 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 	onScroll () {
 		const { dataset, isPopup } = this.props;
 
-		if (!isPopup && popupStore.isOpen('page')) {
+		if (!isPopup && keyboard.isPopup()) {
 			return;
 		};
 
@@ -226,34 +238,43 @@ const PageMainSet = observer(class PageMainSet extends React.Component<I.PageCom
 	onKeyDown (e: any): void {
 		const { dataset, isPopup } = this.props;
 
-		if (!isPopup && popupStore.isOpen('page')) {
+		if (!isPopup && keyboard.isPopup()) {
 			return;
 		};
 
+		const node = $(this.node);
 		const { selection } = dataset || {};
 		const cmd = keyboard.cmdKey();
 		const ids = selection ? selection.get(I.SelectType.Record) : [];
 		const count = ids.length;
 		const rootId = this.getRootId();
 
+		keyboard.shortcut(`${cmd}+f`, e, () => {
+			e.preventDefault();
+
+			node.find('#dataviewControls .filter .icon.search').trigger('click');
+		});
+
 		if (!keyboard.isFocused) {
 			keyboard.shortcut(`${cmd}+a`, e, () => {
 				e.preventDefault();
 
-				const subId = dbStore.getSubId(rootId, Constant.blockId.dataview);
-				const records = dbStore.getRecords(subId, '');
-
+				const records = dbStore.getRecords(dbStore.getSubId(rootId, Constant.blockId.dataview), '');
 				selection.set(I.SelectType.Record, records);
 			});
-		};
 
-		if (count) {
-			keyboard.shortcut('backspace, delete', e, () => {
-				e.preventDefault();
-				Action.archive(ids);
-				selection.clear();
-			});
+			if (count && !menuStore.isOpen()) {
+				keyboard.shortcut('backspace, delete', e, () => {
+					e.preventDefault();
+					Action.archive(ids);
+					selection.clear();
+				});
+			};
 		};
+	};
+
+	isReadonly () {
+		return !UtilObject.canParticipantWrite();
 	};
 
 	resize () {

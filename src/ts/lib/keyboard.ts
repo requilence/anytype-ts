@@ -1,5 +1,5 @@
 import $ from 'jquery';
-import { I, C, UtilCommon, UtilData, Storage, focus, history as historyPopup, analytics, Renderer, sidebar, UtilObject, Preview, Action, translate } from 'Lib';
+import { I, C, UtilCommon, UtilData, Storage, focus, history as historyPopup, analytics, Renderer, sidebar, UtilObject, UtilRouter, Preview, Action, translate } from 'Lib';
 import { commonStore, authStore, blockStore, detailStore, menuStore, popupStore } from 'Store';
 import Constant from 'json/constant.json';
 import Url from 'json/url.json';
@@ -45,13 +45,7 @@ class Keyboard {
 		win.on('keyup.common', e => this.onKeyUp(e));
 		win.on('mousedown.common', e => this.onMouseDown(e));
 		win.on('scroll.common', () => this.onScroll());
-		win.off('mousemove.common beforeunload.common blur.common');
-		
-		win.on('mousemove.common', (e: any) => {
-			this.initPinCheck();
-			this.disableMouse(false);
-			this.onMouseMove(e);
-		});
+		win.on('mousemove.common', e => this.onMouseMove(e));
 		
 		win.on('blur.common', () => {
 			Preview.tooltipHide(true);
@@ -64,6 +58,8 @@ class Keyboard {
 			};
 
 			menuStore.closeAll([ 'blockContext' ]);
+
+			$('.dropTarget.isOver').removeClass('isOver');
 		});
 
 		doc.off('mouseleave.common').on('mouseleave.common', () => {
@@ -83,7 +79,7 @@ class Keyboard {
 	onScroll () {
 		Preview.tooltipHide(false);
 
-		$(window).trigger('resize.menuOnboarding');
+		$(window).trigger('resize.menuOnboarding resize.menuSpace');
 	};
 
 	onMouseDown (e: any) {
@@ -109,12 +105,17 @@ class Keyboard {
 	};
 
 	onMouseMove (e: any) {
+		this.initPinCheck();
+		this.disableMouse(false);
+
 		this.mouse = {
 			page: { x: e.pageX, y: e.pageY },
 			client: { x: e.clientX, y: e.clientY },
 		};
 
-		sidebar.onMouseMove();
+		if (this.isMain()) {
+			sidebar.onMouseMove();
+		};
 	};
 	
 	onKeyDown (e: any) {
@@ -122,22 +123,28 @@ class Keyboard {
 		const key = e.key.toLowerCase();
 		const cmd = this.cmdKey();
 		const isMain = this.isMain();
+		const canWrite = UtilObject.canParticipantWrite();
 
 		this.pressed.push(key);
 
-		this.shortcut(`${cmd}+\\, ${cmd}+.`, e, () => {
+		this.shortcut(`${cmd}+\\, ${cmd}+.`, e, (pressed: string) => {
 			e.preventDefault();
-			sidebar.toggleOpenClose();
+
+			if (pressed.match('.') && this.isFocused) {
+				return;
+			};
+
+			commonStore.isSidebarFixed ? sidebar.toggleOpenClose() : sidebar.toggleExpandCollapse();
 		});
 
 		// Navigation
 		if (!this.isNavigationDisabled) {
-			keyboard.shortcut(isMac ? 'cmd+[' : 'alt+arrowleft', e, () => this.onBack());
-			keyboard.shortcut(isMac ? 'cmd+]' : 'alt+arrowright', e, () => this.onForward());
+			this.shortcut(isMac ? 'cmd+[' : 'alt+arrowleft', e, () => this.onBack());
+			this.shortcut(isMac ? 'cmd+]' : 'alt+arrowright', e, () => this.onForward());
 
 			if (!UtilCommon.getSelectionRange() && isMac) {
-				keyboard.shortcut(`${cmd}+arrowleft`, e, () => this.onBack());
-				keyboard.shortcut(`${cmd}+arrowright`, e, () => this.onForward());
+				this.shortcut(`${cmd}+arrowleft`, e, () => this.onBack());
+				this.shortcut(`${cmd}+arrowright`, e, () => this.onForward());
 			};
 		};
 
@@ -179,13 +186,13 @@ class Keyboard {
 				popupStore.open('shortcut', { preventResize: true });
 			});
 
-			// Lock/Unlock
-			keyboard.shortcut(`ctrl+shift+l`, e, () => {
-				keyboard.onToggleLock();
+			// Spaces
+			this.shortcut('ctrl+tab', e, () => {
+				this.onSpaceMenu(true);
 			});
 
 			// Print
-			keyboard.shortcut(`${cmd}+p`, e, () => {
+			this.shortcut(`${cmd}+p`, e, () => {
 				e.preventDefault();
 				this.onPrint('Shortcut');
 			});
@@ -196,7 +203,7 @@ class Keyboard {
 					return;
 				};
 
-				this.onSearchPopup();
+				this.onSearchPopup('Shortcut');
 			});
 
 			this.shortcut(`${cmd}+l`, e, () => {
@@ -233,12 +240,6 @@ class Keyboard {
 				};
 			});
 
-			// Create new page
-			this.shortcut(`${cmd}+n`, e, () => {
-				e.preventDefault();
-				this.pageCreate();
-			});
-
 			// Settings
 			this.shortcut(`${cmd}+comma`, e, () => {
 				if (!popupStore.isOpen('settings')) {
@@ -249,7 +250,6 @@ class Keyboard {
 			// Create relation
 			this.shortcut(`${cmd}+shift+r`, e, () => {
 				$('#button-header-relation').trigger('click');
-				window.setTimeout(() => { $('#menuBlockRelationView #item-add').trigger('click'); }, Constant.delay.menu * 2);
 			});
 
 			// Store
@@ -271,6 +271,25 @@ class Keyboard {
 					}
 				});
 			});
+
+			if (canWrite) {
+				// Create new page
+				this.shortcut(`${cmd}+n`, e, () => {
+					e.preventDefault();
+					this.pageCreate({}, 'Shortcut');
+				});
+
+				// Quick capture menu
+				this.shortcut(`${cmd}+alt+n`, e, () => {
+					e.preventDefault();
+					this.onQuickCapture();
+				});
+
+				// Lock/Unlock
+				this.shortcut(`ctrl+shift+l`, e, () => {
+					this.onToggleLock();
+				});
+			};
 		};
 
 		this.initPinCheck();
@@ -287,30 +306,18 @@ class Keyboard {
 		return false;
 	};
 
-	pageCreate () {
+	pageCreate (details: any, route: string) {
 		const isMain = this.isMain();
 
 		if (!isMain) {
 			return;
 		};
 
-		const targetId = '';
-		const position = I.BlockPosition.Bottom;
-		const rootId = '';
-		const details: any = {};
-		const flags: I.ObjectFlag[] = [ I.ObjectFlag.SelectType ];
-		
-		if (!rootId) {
-			flags.push(I.ObjectFlag.DeleteEmpty);
-		};
-		
-		UtilObject.create(rootId, targetId, details, position, '', {}, flags, (message: any) => {
-			UtilObject.openAuto({ id: message.targetId });
+		const { fullscreenObject } = commonStore;
 
-			analytics.event('CreateObject', {
-				route: 'Navigation',
-				objectType: commonStore.type,
-			});
+		UtilObject.create('', '', details, I.BlockPosition.Bottom, '', {}, [ I.ObjectFlag.SelectTemplate, I.ObjectFlag.DeleteEmpty ], (message: any) => {
+			fullscreenObject ? UtilObject.openAuto(message.details) : UtilObject.openPopup(message.details);
+			analytics.event('CreateObject', { route, objectType: commonStore.type });
 		});
 	};
 
@@ -346,7 +353,7 @@ class Keyboard {
 				});
 			};
 		} else {
-			const history = UtilCommon.history;
+			const history = UtilRouter.history;
 
 			let prev = history.entries[history.index - 1];
 
@@ -356,12 +363,12 @@ class Keyboard {
 			};
 
 			if (prev) {
-				const route = UtilCommon.getRoute(prev.pathname);
+				const route = UtilRouter.getParam(prev.pathname);
 
 				if ((route.page == 'main') && (route.action == 'history')) {
 					prev = history.entries[history.index - 3];
 					if (prev) {
-						UtilCommon.route(prev.pathname, {});
+						UtilRouter.go(prev.pathname, {});
 					};
 					return;
 				};
@@ -387,7 +394,7 @@ class Keyboard {
 				popupStore.updateData('page', { matchPopup: match }); 
 			});
 		} else {
-			UtilCommon.history.goForward();
+			UtilRouter.history.goForward();
 		};
 
 		menuStore.closeAll();
@@ -397,7 +404,7 @@ class Keyboard {
 	checkBack (): boolean {
 		const { account } = authStore;
 		const isPopup = this.isPopup();
-		const history = UtilCommon.history;
+		const history = UtilRouter.history;
 
 		if (!history) {
 			return;
@@ -411,17 +418,13 @@ class Keyboard {
 			};
 
 			if (prev) {
-				const route = UtilCommon.getRoute(prev.pathname);
+				const route = UtilRouter.getParam(prev.pathname);
 
 				if ([ 'index', 'auth' ].includes(route.page) && account) {
 					return false;
 				};
 
 				if ((route.page == 'main') && !account) {
-					return false;
-				};
-
-				if ((route.page == 'main') && (route.action == 'usecase')) {
 					return false;
 				};
 			};
@@ -432,7 +435,7 @@ class Keyboard {
 
 	checkForward (): boolean {
 		const isPopup = this.isPopup();
-		const history = UtilCommon.history;
+		const history = UtilRouter.history;
 
 		if (!history) {
 			return;
@@ -452,9 +455,9 @@ class Keyboard {
 			return;
 		};
 
-		const rootId = keyboard.getRootId();
-		const logPath = window.Electron.logPath;
-		const tmpPath = window.Electron.tmpPath;
+		const rootId = this.getRootId();
+		const logPath = UtilCommon.getElectron().logPath;
+		const tmpPath = UtilCommon.getElectron().tmpPath;
 
 		switch (cmd) {
 			case 'search': {
@@ -472,6 +475,7 @@ class Keyboard {
 				break;
 			};
 
+			case 'gallery':
 			case 'terms':
 			case 'tutorial':
 			case 'privacy':
@@ -500,7 +504,7 @@ class Keyboard {
 			};
 
 			case 'create': {
-				this.pageCreate();
+				this.pageCreate({}, 'MenuSystem');
 				break;
 			};
 
@@ -550,10 +554,9 @@ class Keyboard {
 			};
 
 			case 'debugSpace': {
-				C.DebugSpaceSummary((message: any) => {
+				C.DebugSpaceSummary(commonStore.space, (message: any) => {
 					if (!message.error.code) {
-						window.Electron.fileWrite('debug-space-summary.json', JSON.stringify(message, null, 5), 'utf8');
-
+						UtilCommon.getElectron().fileWrite('debug-space-summary.json', JSON.stringify(message, null, 5), { encoding: 'utf8' });
 						Renderer.send('pathOpen', tmpPath);
 					};
 				});
@@ -569,8 +572,22 @@ class Keyboard {
 				break;
 			};
 
+			case 'debugProcess': {
+				C.DebugStackGoroutines(logPath, (message: any) => {
+					if (!message.error.code) {
+						Renderer.send('pathOpen', logPath);
+					};
+				});
+				break;
+			};
+
 			case 'resetOnboarding': {
 				Storage.delete('onboarding');
+				break;
+			};
+
+			case 'interfaceLang': {
+				Action.setInterfaceLang(arg);
 				break;
 			};
 
@@ -586,9 +603,8 @@ class Keyboard {
 		C.AppGetVersion((message: any) => {
 			let url = Url.contact;
 
-			url = url.replace(/\%25device\%25/g, window.Electron.version.device);
-			url = url.replace(/\%25os\%25/g, window.Electron.version.os);
-			url = url.replace(/\%25version\%25/g, window.Electron.version.app);
+			url = url.replace(/\%25os\%25/g, UtilCommon.getElectron().version.os);
+			url = url.replace(/\%25version\%25/g, UtilCommon.getElectron().version.app);
 			url = url.replace(/\%25build\%25/g, message.details);
 			url = url.replace(/\%25middleware\%25/g, message.version);
 			url = url.replace(/\%25accountId\%25/g, account.id);
@@ -607,9 +623,8 @@ class Keyboard {
 
 		C.AppGetVersion((message: any) => {
 			const data = [
-				[ translate('libKeyboardDevice'), window.Electron.version.device ],
-				[ translate('libKeyboardOSVersion'), window.Electron.version.os ],
-				[ translate('libKeyboardAppVersion'), window.Electron.version.app ],
+				[ translate('libKeyboardOSVersion'), UtilCommon.getElectron().version.os ],
+				[ translate('libKeyboardAppVersion'), UtilCommon.getElectron().version.app ],
 				[ translate('libKeyboardBuildNumber'), message.details ],
 				[ translate('libKeyboardLibraryVersion'), message.version ],
 				[ translate('libKeyboardAccountID'), account.id ],
@@ -618,13 +633,13 @@ class Keyboard {
 			];
 
 			popupStore.open('confirm', {
-				className: 'isWide isLeft',
+				className: 'isWide techInfo',
 				data: {
-					text: data.map(it => `<b>${it[0]}</b>: ${it[1]}`).join('<br/>'),
+					title: translate('menuHelpTech'),
+					text: data.map(it => `<dl><dt>${it[0]}:</dt><dd>${it[1]}</dd></dl>`).join(''),
 					textConfirm: translate('commonCopy'),
-					textCancel: translate('commonClose'),
-					canConfirm: true,
-					canCancel: true,
+					colorConfirm: 'blank',
+					canCancel: false,
 					onConfirm: () => {
 						UtilCommon.copyToast(translate('libKeyboardTechInformation'), data.map(it => `${it[0]}: ${it[1]}`).join('\n'));
 					},
@@ -634,13 +649,40 @@ class Keyboard {
 	};
 
 	onUndo (rootId: string, route?: string, callBack?: (message: any) => void) {
-		C.ObjectUndo(rootId, callBack);
+		const { account } = authStore;
+		if (!account) {
+			return;
+		};
 
+		C.ObjectUndo(rootId, (message: any) => {
+			if (message.blockId && message.range) {
+				focus.set(message.blockId, message.range);
+				focus.apply();
+			};
+
+			if (callBack) {
+				callBack(message);
+			};
+		});
 		analytics.event('Undo', { route });
 	};
 
 	onRedo (rootId: string, route?: string, callBack?: (message: any) => void) {
-		C.ObjectRedo(rootId, callBack);
+		const { account } = authStore;
+		if (!account) {
+			return;
+		};
+
+		C.ObjectRedo(rootId, (message: any) => {
+			if (message.blockId && message.range) {
+				focus.set(message.blockId, message.range);
+				focus.apply();
+			};
+
+			if (callBack) {
+				callBack(message);
+			};
+		});
 
 		analytics.event('Redo', { route });
 	};
@@ -662,6 +704,8 @@ class Keyboard {
 		if (clearTheme) {
 			UtilCommon.addBodyClass('theme', '');
 		};
+
+		$('#link-prism').remove();
 		focus.clearRange(true);
 	};
 
@@ -728,9 +772,54 @@ class Keyboard {
 		}, Constant.delay.menu);
 	};
 
-	onSearchPopup () {
+	onSearchPopup (route: string) {
 		popupStore.open('search', {
-			data: { isPopup: this.isPopup() },
+			data: { isPopup: this.isPopup(), route },
+		});
+	};
+
+	onSpaceMenu (shortcut: boolean) {
+		popupStore.close('search', () => {
+			menuStore.closeAll([ 'quickCapture' ], () => {
+				menuStore.open('space', {
+					element: '#navigationPanel',
+					className: 'fixed',
+					classNameWrap: 'fromNavigation',
+					type: I.MenuType.Horizontal,
+					horizontal: I.MenuDirection.Center,
+					vertical: I.MenuDirection.Top,
+					offsetY: -12,
+					data: {
+						shortcut,
+					}
+				});
+			});
+		});
+	};
+
+	onQuickCapture () {
+		if (menuStore.isOpen('quickCapture')) {
+			menuStore.close('quickCapture');
+			return;
+		};
+
+		const element = '#button-navigation-plus';
+
+		popupStore.close('search', () => {
+			menuStore.closeAll([ 'quickCapture', 'space' ], () => {
+				menuStore.open('quickCapture', {
+					element,
+					className: 'fixed',
+					classNameWrap: 'fromNavigation',
+					type: I.MenuType.Horizontal,
+					vertical: I.MenuDirection.Top,
+					horizontal: I.MenuDirection.Center,
+					noFlipY: true,
+					offsetY: -20,
+					onOpen: () => $(element).addClass('active'),
+					onClose: () => $(element).removeClass('active'),
+				});
+			});
 		});
 	};
 
@@ -785,10 +874,6 @@ class Keyboard {
 		return (this.isPopup() ? this.getPopupMatch() : this.match) || { params: {} };
 	};
 
-	ctrlByPlatform (e: any) {
-		return UtilCommon.isPlatformMac() ? e.metaKey : e.ctrlKey;
-	};
-
 	isMain () {
 		return this.match?.params?.page == 'main';
 	};
@@ -826,6 +911,8 @@ class Keyboard {
 	};
 
 	setPinChecked (v: boolean) {
+		v = Boolean(v);
+
 		if (this.isPinChecked === v) {
 			return;
 		};
@@ -852,14 +939,6 @@ class Keyboard {
 
 	initPinCheck () {
 		const { account } = authStore;
-		const { pinTime } = commonStore;
-		const pin = Storage.get('pin');
-
-		if (!pin) {
-			this.setPinChecked(true);
-			return;
-		};
-
 		const check = () => {
 			const pin = Storage.get('pin');
 			if (!pin) {
@@ -880,8 +959,9 @@ class Keyboard {
 			};
 
 			this.setPinChecked(false);
-			UtilCommon.route('/auth/pin-check', { replace: true, animate: true });
-		}, pinTime);
+			UtilRouter.go('/auth/pin-check', { replace: true, animate: true });
+			Renderer.send('pin-check');
+		}, commonStore.pinTime);
 	};
 
 	restoreSource () {
@@ -944,10 +1024,11 @@ class Keyboard {
 	};
 	
 	isSpecial (e: any): boolean {
-		return [ 
-			Key.escape, Key.backspace, Key.tab, Key.enter, Key.shift, Key.ctrl, 
-			Key.alt, Key.meta, Key.up, Key.down, Key.left, Key.right,
-		].includes(this.eventKey(e));
+		return this.isArrow(e) || [ Key.escape, Key.backspace, Key.tab, Key.enter, Key.shift, Key.ctrl, Key.alt, Key.meta ].includes(this.eventKey(e));
+	};
+
+	isArrow (e: any): boolean {
+		return [ Key.up, Key.down, Key.left, Key.right ].includes(this.eventKey(e));
 	};
 
 	withCommand (e: any): boolean {
@@ -983,6 +1064,11 @@ class Keyboard {
 			pressed.push('cmd');
 		};
 
+		// Cmd + Alt + N hack
+		if (which == KeyCode.dead) {
+			pressed.push('n');
+		};
+
 		for (const item of a) {
 			const keys = item.split('+').sort();
 			
@@ -998,6 +1084,7 @@ class Keyboard {
 			pressed = [ ...new Set(pressed) ];
 
 			const check = pressed.sort().join('+');
+
 			if (check == keys.join('+')) {
 				res = check;
 			};

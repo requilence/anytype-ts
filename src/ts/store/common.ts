@@ -1,9 +1,8 @@
 import { action, computed, intercept, makeObservable, observable, set } from 'mobx';
 import $ from 'jquery';
-import { analytics, I, Storage, UtilCommon, UtilObject, Renderer } from 'Lib';
-import { blockStore, dbStore } from 'Store';
+import { I, Storage, UtilCommon, UtilObject, Renderer } from 'Lib';
+import { dbStore } from 'Store';
 import Constant from 'json/constant.json';
-import * as Sentry from '@sentry/browser';
 
 interface Filter {
 	from: number;
@@ -17,13 +16,17 @@ interface Graph {
 	label: boolean;
 	relation: boolean;
 	link: boolean;
+	local: boolean;
 	filter: string;
 };
 
 interface SpaceStorage {
-	bytesUsed: number;
 	bytesLimit: number;
 	localUsage: number;
+	spaces: {
+		spaceId: string;
+		bytesUsage: number;
+	}[],
 };
 
 class CommonStore {
@@ -36,15 +39,21 @@ class CommonStore {
     public cellId = '';
 	public themeId = '';
 	public nativeThemeIsDark = false;
-	public typeId = '';
+	public defaultType = '';
 	public pinTimeId = 0;
 	public isFullScreen = false;
-	public autoSidebarValue = false;
-	public isSidebarFixedValue = false;
 	public redirect = '';
 	public languages: string[] = [];
-	public workspaceId = '';
+	public spaceId = '';
 	public notionToken = '';
+	public autoSidebarValue = null;
+	public isSidebarFixedValue = null;
+	public showRelativeDatesValue = null;
+	public fullscreenObjectValue = null;
+	public gallery = {
+		categories: [],
+		list: [],
+	};
 
 	public previewObj: I.Preview = { 
 		type: null, 
@@ -61,13 +70,14 @@ class CommonStore {
 		label: true,
 		relation: true,
 		link: true,
+		local: false,
 		filter: '',
 	};
 
 	public spaceStorageObj: SpaceStorage = {
-		bytesUsed: 0,
 		bytesLimit: 0,
 		localUsage: 0,
+		spaces: [],
 	};
 
     constructor() {
@@ -81,11 +91,12 @@ class CommonStore {
 			spaceStorageObj: observable,
 			themeId: observable,
 			nativeThemeIsDark: observable,
-			typeId: observable,
+			defaultType: observable,
 			isFullScreen: observable,
 			autoSidebarValue: observable,
 			isSidebarFixedValue: observable,
-			workspaceId: observable,
+			fullscreenObjectValue: observable,
+			spaceId: observable,
             config: computed,
             progress: computed,
             preview: computed,
@@ -94,7 +105,7 @@ class CommonStore {
             gateway: computed,
 			theme: computed,
 			nativeTheme: computed,
-			workspace: computed,
+			space: computed,
             gatewaySet: action,
             progressSet: action,
             progressClear: action,
@@ -106,7 +117,7 @@ class CommonStore {
 			toastClear: action,
 			themeSet: action,
 			nativeThemeSet: action,
-			workspaceSet: action,
+			spaceSet: action,
 			spaceStorageSet: action,
 		});
 
@@ -114,7 +125,8 @@ class CommonStore {
     };
 
     get config(): any {
-		return window.Config || { ...this.configObj, debug: this.configObj.debug || {} };
+		const config = window.AnytypeGlobalConfig || this.configObj || {};
+		return { ...config, debug: config.debug || {} };
 	};
 
     get progress(): I.Progress {
@@ -138,19 +150,14 @@ class CommonStore {
 	};
 
 	get type(): string {
-		const typeId = String(this.typeId || Storage.get('defaultType') || '');
+		const key = String(this.defaultType || Storage.get('defaultType') || Constant.default.typeKey);
 
-		if (!typeId) {
-			return Constant.typeId.page;
-		};
-
-		const type = dbStore.getType(typeId);
-
+		let type = dbStore.getTypeByKey(key);
 		if (!type || !type.isInstalled || !UtilObject.getPageLayouts().includes(type.recommendedLayout)) {
-			return Constant.typeId.page;
+			type = dbStore.getTypeByKey(Constant.default.typeKey);
 		};
 
-		return typeId;
+		return type ? type.id : '';
 	};
 
 	get fullscreen(): boolean {
@@ -162,11 +169,15 @@ class CommonStore {
 	};
 
 	get autoSidebar(): boolean {
-		return Boolean(this.autoSidebarValue || Storage.get('autoSidebar'));
+		return this.boolGet('autoSidebar');
 	};
 
 	get isSidebarFixed(): boolean {
-		return Boolean(this.isSidebarFixedValue) || Storage.get('isSidebarFixed');
+		return this.boolGet('isSidebarFixed');
+	};
+
+	get fullscreenObject(): boolean {
+		return this.boolGet('fullscreenObject');
 	};
 
 	get theme(): string {
@@ -177,8 +188,8 @@ class CommonStore {
 		return this.nativeThemeIsDark ? 'dark' : '';
 	};
 
-	get workspace(): string {
-		return String(this.workspaceId || '');
+	get space(): string {
+		return String(this.spaceId || '');
 	};
 
 	get graph(): Graph {
@@ -186,37 +197,28 @@ class CommonStore {
 	};
 
 	get spaceStorage (): SpaceStorage {
-		let { bytesUsed, localUsage } = this.spaceStorageObj;
-		
-		if (bytesUsed <= 1024 * 1024) {
-			bytesUsed = 0;
-		};
-		if (localUsage <= 1024 * 1024) {
-			localUsage = 0;
-		};
-
-		return { ...this.spaceStorageObj, bytesUsed, localUsage };
+		const spaces = this.spaceStorageObj.spaces || [];
+		return { ...this.spaceStorageObj, spaces };
 	};
 
 	get interfaceLang (): string {
 		return this.config.interfaceLang || Constant.default.interfaceLang;
 	};
 
+	get showRelativeDates (): boolean {
+		return this.boolGet('showRelativeDates');
+	};
+
     gatewaySet (v: string) {
 		this.gatewayUrl = v;
 	};
 
-    fileUrl (hash: string) {
-		hash = String(hash || '');
-
-		return this.gateway + '/file/' + hash;
+    fileUrl (id: string) {
+		return [ this.gateway, 'file', String(id || '') ].join('/');
 	};
 
-    imageUrl (hash: string, width: number) {
-		hash = String(hash || '');
-		width = Number(width) || 0;
-
-		return `${this.gateway}/image/${hash}?width=${width}`;
+    imageUrl (id: string, width: number) {
+		return [ this.gateway, 'image', String(id || '') ].join('/') + `?width=${Number(width) || 0}`;
 	};
 
     progressSet (v: I.Progress) {
@@ -278,9 +280,10 @@ class CommonStore {
 		};
 	};
 
-	workspaceSet (id: string) {
-		this.workspaceId = String(id || '');
+	spaceSet (id: string) {
+		this.spaceId = String(id || '');
 	};
+
 
 	previewClear () {
 		this.previewObj = { type: null, target: null, element: null, range: { from: 0, to: 0 }, marks: [] };
@@ -290,10 +293,10 @@ class CommonStore {
 		this.toastObj = null;
 	};
 
-	defaultTypeSet (v: string) {
-		this.typeId = String(v || '');
+	typeSet (v: string) {
+		this.defaultType = String(v || '');
 
-		Storage.set('defaultType', this.typeId);
+		Storage.set('defaultType', this.defaultType);
 	};
 
 	pinTimeSet (v: string) {
@@ -303,15 +306,19 @@ class CommonStore {
 	};
 
 	autoSidebarSet (v: boolean) {
-		this.autoSidebarValue = Boolean(v);
-
-		Storage.set('autoSidebar', this.autoSidebarValue);
+		this.boolSet('autoSidebar', v);
 	};
 
 	isSidebarFixedSet (v: boolean) {
-		this.isSidebarFixedValue = Boolean(v);
+		this.boolSet('isSidebarFixed', v);
+	};
 
-		Storage.set('isSidebarFixed', this.isSidebarFixedValue);
+	showRelativeDatesSet (v: boolean) {
+		this.boolSet('showRelativeDates', v);
+	};
+
+	fullscreenObjectSet (v: boolean) {
+		this.boolSet('fullscreenObject', v);
 	};
 
 	fullscreenSet (v: boolean) {
@@ -336,15 +343,34 @@ class CommonStore {
 		this.notionToken = v;
 	};
 
-	getThemeClass () {
-		if (this.themeId == 'system') {
-			return this.nativeThemeIsDark ? 'dark' : '';
-		} else {
-			return this.themeId;
+	boolGet (k: string) {
+		const tk = `${k}Value`;
+		if (this[tk] === null) {
+			this[tk] = Storage.get(k);
 		};
+		return !!this[tk];
 	};
 
-	setThemeClass() {
+	boolSet (k: string, v: boolean) {
+		v = Boolean(v);
+
+		this[`${k}Value`] = v;
+		Storage.set(k, v);
+	};
+
+	getThemeClass () {
+		let ret = '';
+
+		if (this.themeId == 'system') {
+			ret = this.nativeThemeIsDark ? 'dark' : '';
+		} else {
+			ret = this.themeId;
+		};
+
+		return String(ret || '');
+	};
+
+	setThemeClass () {
 		const head = $('head');
 		const c = this.getThemeClass();
 
@@ -352,11 +378,16 @@ class CommonStore {
 		Renderer.send('setBackground', c);
 
 		head.find('#link-prism').remove();
-		if (c == 'dark') {
+		if (c) {
 			head.append(`<link id="link-prism" rel="stylesheet" href="./css/theme/${c}/prism.css" />`);
 		};
 
 		$(window).trigger('updateTheme');
+	};
+
+	getThemePath () {
+		const c = this.getThemeClass();
+		return c ? `theme/${c}/` : '';
 	};
 
 	nativeThemeSet (isDark: boolean) {
@@ -365,21 +396,6 @@ class CommonStore {
 
 	languagesSet (v: string[]) {
 		this.languages = v;
-	};
-
-	infoSet (info: I.AccountInfo) {
-		console.log('[commonStore.infoSet]', info);
-
-		blockStore.rootSet(info.homeObjectId);
-		blockStore.profileSet(info.profileObjectId);
-		blockStore.widgetsSet(info.widgetsId);
-
-		this.gatewaySet(info.gatewayUrl);
-		this.workspaceSet(info.accountSpaceId);
-
-		analytics.device(info.deviceId);
-		analytics.profile(info.analyticsId);
-		Sentry.setUser({ id: info.analyticsId });
 	};
 
 	configSet (config: any, force: boolean) {

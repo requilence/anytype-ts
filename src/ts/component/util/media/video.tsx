@@ -46,9 +46,9 @@ class MediaVideo extends React.Component<Props> {
         const node = $(this.node);
         const video = node.find('video');
 
-        video.on('play', () => { this.onPlay(); });
-        video.on('pause', () => { this.onPause(); });
-        video.on('ended', () => { this.onEnded(); });
+        video.on('play', () => this.onPlay());
+        video.on('pause', () => this.onPause());
+        video.on('ended', () => this.onEnded());
     };
 
     unbind () {
@@ -82,6 +82,10 @@ class MediaVideo extends React.Component<Props> {
 	onEnded () {
 		const node = $(this.node);
 		const video = node.find('video');
+
+		if (!video.length) {
+			return;
+		};
 
 		video.get(0).controls = false;
 		node.removeClass('isPlaying');

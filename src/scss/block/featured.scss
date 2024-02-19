@@ -2,8 +2,7 @@
 
 .blocks {
 	.block.blockFeatured { 
-		@include text-common; line-height: 28px; color: $colorDarkGrey; padding: 0px 0px 24px 0px; white-space: nowrap; display: flex; 
-		margin-top: -3px;
+		@include text-common; line-height: 28px; color: var(--color-text-secondary); padding: 0px 0px 24px 0px; white-space: nowrap; display: flex; 
 	}
 	.block.blockFeatured {
 		.icon.checkbox { width: 20px; height: 20px; vertical-align: middle; margin-top: -4px; background-image: url('~img/icon/dataview/checkbox0.svg'); }
@@ -11,7 +10,7 @@
 
 		.wrap { white-space: normal; }
 
-		.bullet { width: 4px; height: 4px; border-radius: 100%; background: $colorDarkGrey; display: inline-block; vertical-align: middle; margin: 0px 2px; }
+		.bullet { width: 4px; height: 4px; border-radius: 100%; background: var(--color-text-secondary); display: inline-block; vertical-align: middle; margin: 0px 2px; }
 
 		.cell.canEdit {
 			.cellContent {
@@ -21,10 +20,10 @@
 
 		.cell.first .bullet { display: none; }
 
-		.cellContent { display: inline; border-radius: 4px; vertical-align: top; padding: 5.5px 6px; transition: background $transitionCommon; }
+		.cellContent { display: inline; border-radius: 4px; vertical-align: top; padding: 5.5px 6px; transition: background $transitionCommon; cursor: default; }
 		.cellContent.disabled { opacity: 1; }
 
-		.cellContent:not(.disabled):hover, .cellContent:not(.disabled).hover { background: $colorShapeHighlightMedium; }
+		.cellContent:not(.disabled):hover, .cellContent:not(.disabled).hover { background: var(--color-shape-highlight-medium); }
 		.cellContent > .wrap { display: inline; }
 		.cellContent.isName .name { display: inline; }
 		.cellContent {
@@ -39,14 +38,17 @@
 			.empty { vertical-align: top; }
 			.flex { display: inline; }
 
-			.more { vertical-align: middle; }
+			.more { vertical-align: middle; margin-top: -2px; }
+			.label { display: inline; vertical-align: middle; }
 		}
 
 		.cellContent.c-select {
-			.tagItem { margin: 0px 6px 0px 0px; vertical-align: middle; }
+			.over { display: inline; }
+			.tagItem { margin: -2px 6px 0px 0px; vertical-align: middle; }
 			.tagItem:last-child { margin-right: 0px; }
+			.tagItem.isStatus { line-height: 16px; }
 			.more { margin: 0px; vertical-align: middle; }
-		} 
+		}
 
 		.cellContent.c-file {
 			.element { margin-right: 2px; }
@@ -55,13 +57,25 @@
 			.iconObject * { position: static; vertical-align: middle; margin: 0px; }
 			.name { display: none; }
 			.empty { padding: 0px 4px; }
+			.more { margin-top: 2px; }
 		}
 
 		.cellContent.c-object, .cellContent.c-file {
 			.element { cursor: default; }
 		}
 
+		.cellContent.c-object {
+			.iconObject { display: inline-block; vertical-align: middle; margin: -1px 6px 0px 0px !important; }
+		}
+
 		.cellContent.c-checkbox { padding: 5px 3px; }
+		.cellContent.c-checkbox {
+			.icon { margin: 0px 5px 0px 0px; }
+		}
+
+		.cellContent.c-longText {
+			.name { display: inline-block; vertical-align: top; max-width: 220px; @include text-overflow-nw; }
+		}
 	}
 	.block.blockFeatured > .wrapMenu:hover > .icon.dnd { opacity: 1; }
 

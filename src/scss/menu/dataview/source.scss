@@ -8,7 +8,7 @@
 
 		.item { padding: 4px 10px; position: relative; white-space: nowrap; display: flex; }
 		.item {
-			.grey { color: $colorMediumGrey; }
+			.grey { color: var(--color-control-active); }
 			.iconObject { margin-right: 10px; }
 
 			.buttons { line-height: 44px; opacity: 0; transition: $transitionAllCommon; }
@@ -19,14 +19,14 @@
 			.name { @include text-overflow-nw; width: 100%; vertical-align: middle; }
 
 			.select { overflow: hidden; border: 0px; padding: 0px; display: block; }
-			.select:hover, .select.active { background: none; }
+			.select:hover, .select.isFocused { background: none; }
 			.select {
 				.icon.relation { display: none; }
 				.icon.arrow { display: none; }
 			}
 
-			.condition { color: $colorDarkGrey; margin-right: 4px; }
-			.value { color: $colorDarkGrey; white-space: nowrap; overflow: hidden; line-height: 22px; }
+			.condition { color: var(--color-text-secondary); margin-right: 4px; }
+			.value { color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; line-height: 22px; }
 
 			.tagItem { margin: 2px 4px 0px 0px; vertical-align: top; }
 

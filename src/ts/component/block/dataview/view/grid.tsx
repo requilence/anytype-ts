@@ -5,7 +5,7 @@ import arrayMove from 'array-move';
 import $ from 'jquery';
 import { Icon, LoadMore } from 'Component';
 import { I, C, UtilCommon, translate, keyboard, Relation } from 'Lib';
-import { dbStore, menuStore, blockStore } from 'Store';
+import { dbStore, menuStore, blockStore, detailStore } from 'Store';
 import HeadRow from './grid/head/row';
 import BodyRow from './grid/body/row';
 import Constant from 'json/constant.json';
@@ -31,9 +31,10 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 	};
 
 	render () {
-		const { rootId, block, isPopup, isInline, className, getView, onRecordAdd, getEmpty, getRecords, getLimit, getVisibleRelations } = this.props;
+		const { rootId, block, isPopup, isInline, className, getView, getKeys, onRecordAdd, getEmpty, getRecords, getLimit, getVisibleRelations } = this.props;
 		const view = getView();
 		const relations = getVisibleRelations();
+		const subId = dbStore.getSubId(rootId, block.id);
 		const records = getRecords();
 		const { offset, total } = dbStore.getMeta(dbStore.getSubId(rootId, block.id), '');
 		const limit = getLimit();
@@ -55,7 +56,7 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 							key={'grid-row-' + view.id + index} 
 							{...this.props} 
 							readonly={!isAllowedObject}
-							recordId={id}
+							record={detailStore.get(subId, records[index], getKeys(view.id))}
 							cellPosition={this.cellPosition}
 							getColumnWidths={this.getColumnWidths}
 						/>
@@ -89,7 +90,7 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 														key={'grid-row-' + view.id + index} 
 														{...this.props} 
 														readonly={!isAllowedObject}
-														recordId={records[index]}
+														record={detailStore.get(subId, records[index], getKeys(view.id))}
 														style={{ ...style, top: style.top + 2 }}
 														cellPosition={this.cellPosition}
 														getColumnWidths={this.getColumnWidths}
@@ -126,20 +127,20 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 
 							{content}
 
-							{isInline && (limit + offset < total) ? (
-								<LoadMore limit={getLimit()} loaded={records.length} total={total} onClick={this.loadMoreRows} />
-							) : ''}
-
-							{isAllowedObject && !isInline ? (
+							{isAllowedObject ? (
 								<div className="row add">
 									<div className="cell add">
-										<div className="btn" onClick={(e: any) => { onRecordAdd(e, 1); }}>
+										<div className="btn" onClick={e => onRecordAdd(e, 1)}>
 											<Icon className="plus" />
-											<div className="name">{translate('blockDataviewNew')}</div>
+											<div className="name">{translate('commonNewObject')}</div>
 										</div>
 									</div>
 								</div>
 							) : null}
+
+							{isInline && (limit + offset < total) ? (
+								<LoadMore limit={getLimit()} loaded={records.length} total={total} onClick={this.loadMoreRows} />
+							) : ''}
 						</div>
 					</div>
 				</div>
@@ -168,7 +169,7 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 		const node = $(this.node);
 
 		this.unbind();
-		node.find('#scroll').on('scroll', () => { this.onScroll(); });
+		node.find('#scroll').on('scroll', () => this.onScroll());
 	};
 
 	unbind () {
@@ -178,64 +179,7 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 	};
 
 	onScroll () {
-		const win = $(window);
-		const menus = menuStore.list.filter(it => Constant.menuIds.cell.includes(it.id));
-
-		for (const menu of menus) {
-			win.trigger('resize.' + UtilCommon.toCamelCase('menu-' + menu.id));
-		};
-
-		this.resizeColumns('', 0);
-	};
-
-	resize () {
-		const { rootId, block, isPopup, isInline, getVisibleRelations } = this.props;
-		const element = blockStore.getMapElement(rootId, block.id);
-		
-		if (!element) {
-			return;
-		};
-
-		const parent = blockStore.getLeaf(rootId, element.parentId);
-		const node = $(this.node);
-		const scroll = node.find('#scroll');
-		const wrap = node.find('#scrollWrap');
-		const grid = node.find('.ReactVirtualized__Grid__innerScrollContainer');
-		const container = UtilCommon.getPageContainer(isPopup);
-		const width = getVisibleRelations().reduce((res: number, current: any) => { return res + current.width; }, Constant.size.blockMenu);
-		const length = dbStore.getRecords(dbStore.getSubId(rootId, block.id), '').length;
-		const cw = container.width();
-		const rh = this.getRowHeight();
-
-		if (isInline) {
-			if (parent) {
-				if (parent.isPage() || parent.isLayoutDiv()) {
-					const wrapper = $('#editorWrapper');
-					const ww = wrapper.width();
-					const vw = Math.max(ww, width) + (width > ww ? PADDING : 0);
-					const margin = (cw - ww) / 2;
-					const offset = 8;
-
-					scroll.css({ width: cw - offset, marginLeft: -margin - 2, paddingLeft: margin });
-					wrap.css({ width: vw + margin - offset, paddingRight: margin - offset });
-				} else {
-					const parentObj = $(`#block-${parent.id}`);
-					const vw = parentObj.length ? (parentObj.width() - Constant.size.blockMenu) : 0;
-
-					wrap.css({ width: Math.max(vw, width) });
-				};
-			};
-		} else {
-			const mw = cw - PADDING * 2;
-			const vw = Math.max(mw, width) + (width > mw ? PADDING : 0);
-			const margin = (cw - mw) / 2;
-			const pr = width > mw ? PADDING : 0;
-
-			scroll.css({ width: cw - 4, marginLeft: -margin - 2, paddingLeft: margin });
-			wrap.css({ width: vw, paddingRight: pr });
-		};
-
-		grid.css({ height: length * rh + 4, maxHeight: length * rh + 4 });
+		menuStore.resizeAll();
 		this.resizeColumns('', 0);
 	};
 
@@ -290,12 +234,14 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 		const x = cell.position().left;
 		const width = content.outerWidth();
 		const sx = scroll.scrollLeft();
+		const sw = scroll.width();
 		const container = $(UtilCommon.getBodyContainer(isPopup ? 'popup' : 'page'));
 		const ww = container.width();
+		const rx = x - sx + width;
 
 		content.css({ left: 0, right: 'auto' });
 
-		if (x - sx + width >= ww - 92) {
+		if ((rx >= ww - 92) || (rx > sw)) {
 			content.css({ left: 'auto', right: 0 });
 		};
 	};
@@ -313,8 +259,8 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 
 		$('body').addClass('colResize');
 		win.off('mousemove.cell mouseup.cell');
-		win.on('mousemove.cell', (e: any) => { this.onResizeMove(e, relationKey); });
-		win.on('mouseup.cell', (e: any) => { this.onResizeEnd(e, relationKey); });
+		win.on('mousemove.cell', e => this.onResizeMove(e, relationKey));
+		win.on('mouseup.cell', e => this.onResizeEnd(e, relationKey));
 
 		el.addClass('isResizing');
 		keyboard.setResize(true);
@@ -351,7 +297,7 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 			width: this.checkWidth(e.pageX - this.ox),
 		});
 
-		window.setTimeout(() => { keyboard.setResize(false); }, 50);
+		window.setTimeout(() => keyboard.setResize(false), 50);
 	};
 
 	checkWidth (width: number): number {
@@ -374,7 +320,7 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 				isInline,
 				isCollection,
 				blockId: block.id,
-				onAdd: () => { menuStore.closeAll(Constant.menuIds.cellAdd); }
+				onAdd: () => menuStore.closeAll(Constant.menuIds.cellAdd)
 			}
 		});
 	};
@@ -408,6 +354,57 @@ const ViewGrid = observer(class ViewGrid extends React.Component<I.ViewComponent
 			loadData(view.id, offset, false, resolve);
 			dbStore.metaSet(subId, '', { offset });
 		});
+	};
+
+	resize () {
+		const { rootId, block, isPopup, isInline, getVisibleRelations } = this.props;
+		const element = blockStore.getMapElement(rootId, block.id);
+		
+		if (!element) {
+			return;
+		};
+
+		const parent = blockStore.getLeaf(rootId, element.parentId);
+		const node = $(this.node);
+		const scroll = node.find('#scroll');
+		const wrap = node.find('#scrollWrap');
+		const grid = node.find('.ReactVirtualized__Grid__innerScrollContainer');
+		const container = UtilCommon.getPageContainer(isPopup);
+		const width = getVisibleRelations().reduce((res: number, current: any) => { return res + current.width; }, Constant.size.blockMenu);
+		const length = dbStore.getRecords(dbStore.getSubId(rootId, block.id), '').length;
+		const cw = container.width();
+		const rh = this.getRowHeight();
+
+		if (isInline) {
+			if (parent) {
+				if (parent.isPage() || parent.isLayoutDiv()) {
+					const wrapper = $('#editorWrapper');
+					const ww = wrapper.width();
+					const vw = Math.max(ww, width) + (width > ww ? PADDING : 0);
+					const margin = (cw - ww) / 2;
+					const offset = 8;
+
+					scroll.css({ width: cw - offset, marginLeft: -margin - 2, paddingLeft: margin });
+					wrap.css({ width: vw + margin - offset, paddingRight: margin - offset });
+				} else {
+					const parentObj = $(`#block-${parent.id}`);
+					const vw = parentObj.length ? (parentObj.width() - Constant.size.blockMenu) : 0;
+
+					wrap.css({ width: Math.max(vw, width) });
+				};
+			};
+		} else {
+			const mw = cw - PADDING * 2;
+			const vw = Math.max(mw, width) + (width > mw ? PADDING : 0);
+			const margin = (cw - mw) / 2;
+			const pr = width > mw ? PADDING : 0;
+
+			scroll.css({ width: cw - 4, marginLeft: -margin - 2, paddingLeft: margin });
+			wrap.css({ width: vw, paddingRight: pr });
+		};
+
+		grid.css({ height: length * rh + 4, maxHeight: length * rh + 4 });
+		this.resizeColumns('', 0);
 	};
 	
 });

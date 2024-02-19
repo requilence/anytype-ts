@@ -60,7 +60,14 @@ const MenuBlockContext = observer(class MenuBlockContext extends React.Component
 			<div className="flex">
 				{canTurn ? (
 					<div className="section">
-						<Icon id={'button-' + blockId + '-style'} arrow={true} tooltip={translate('menuBlockContextSwitchStyle')} tooltipY={I.MenuDirection.Top} className={[ styleIcon, 'blockStyle' ].join(' ')} onMouseDown={(e: any) => { this.onMark(e, 'style'); }} />
+						<Icon 
+							id={`button-${blockId}-style`} 
+							arrow={true} 
+							tooltip={translate('menuBlockContextSwitchStyle')} 
+							tooltipY={I.MenuDirection.Top} 
+							className={[ styleIcon, 'blockStyle' ].join(' ')} 
+							onMouseDown={e => this.onMark(e, 'style')} 
+						/>
 					</div>
 				) : ''}
 				
@@ -91,7 +98,7 @@ const MenuBlockContext = observer(class MenuBlockContext extends React.Component
 											tooltip={action.name}
 											tooltipCaption={action.caption}
 											tooltipY={I.MenuDirection.Top}
-											onMouseDown={(e: any) => { this.onMark(e, action.type); }} 
+											onMouseDown={e => this.onMark(e, action.type)} 
 										/>
 									);
 								})}
@@ -106,7 +113,7 @@ const MenuBlockContext = observer(class MenuBlockContext extends React.Component
 								tooltip={translate('commonColor')}
 								tooltipCaption={`${cmd} + Shift + C`}
 								tooltipY={I.MenuDirection.Top}
-								onMouseDown={(e: any) => { this.onMark(e, I.MarkType.Color); }} 
+								onMouseDown={e => this.onMark(e, I.MarkType.Color)} 
 							/>
 
 							<Icon
@@ -116,7 +123,7 @@ const MenuBlockContext = observer(class MenuBlockContext extends React.Component
 								tooltip={translate('commonBackground')}
 								tooltipCaption={`${cmd} + Shift + H`}
 								tooltipY={I.MenuDirection.Top}
-								onMouseDown={(e: any) => { this.onMark(e, I.MarkType.BgColor); }} 
+								onMouseDown={e => this.onMark(e, I.MarkType.BgColor)} 
 							/>
 						</div>
 					</React.Fragment>
@@ -136,7 +143,7 @@ const MenuBlockContext = observer(class MenuBlockContext extends React.Component
 							className="more"
 							tooltip={translate('menuBlockContextMoreOptions')}
 							tooltipY={I.MenuDirection.Top}
-							onMouseDown={(e: any) => { this.onMark(e, 'more'); }}
+							onMouseDown={e => this.onMark(e, 'more')}
 						/>
 					</div>
 				) : ''}
@@ -256,7 +263,7 @@ const MenuBlockContext = observer(class MenuBlockContext extends React.Component
 						menuStore.updateData(this.props.id, { marks });
 						onChange(marks);
 
-						window.setTimeout(() => { focus.apply(); }, 15);
+						window.setTimeout(() => focus.apply(), 15);
 					}
 				});
 
@@ -288,11 +295,9 @@ const MenuBlockContext = observer(class MenuBlockContext extends React.Component
 				menuParam.data = Object.assign(menuParam.data, {
 					value: (mark ? mark.param : ''),
 					onChange: (param: string) => {
-						if (!mark && !param) {
-							return;
+						if (param) {
+							Storage.set(storageKey, param);
 						};
-
-						Storage.set(storageKey, param);
 
 						marks = Mark.toggle(marks, { type, param, range: { from, to } });
 						menuStore.updateData(this.props.id, { marks });

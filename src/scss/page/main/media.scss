@@ -2,32 +2,34 @@
 
 .pageMainMedia {
 
-	.blocks { margin: 0px auto; padding: 60px 0px; display: flex; }
+	.blocks { margin: 0px auto; padding: 40px 0px 0px 0px; display: flex; }
 	.blocks {
 		.side.right { padding-top: 25px; }
 	}
 
-	.blocks > .empty { width: 100%; text-align: center; color: $colorDarkGrey; @include text-header3; }
+	.blocks > .empty { width: 100%; text-align: center; color: var(--color-text-secondary); @include text-header3; }
 
 	.blocks.horizontal { width: 704px; flex-direction: column; }
-	.blocks.horizontal {
-		.block.blockMedia { max-height: 396px; }
-	}
 
 	.blocks.isVideo {
 		.block.blockMedia { max-height: unset; }
 	}
 
-	.blocks.vertical { width: calc(100% - 56px); flex-direction: row; }
+	.blocks.vertical { width: calc(100% - 56px); flex-direction: row; gap: 0px 32px; }
 	.blocks.vertical {
-		.side { width: 50%; }
-		.side.left { margin-right: 32px; min-width: 400px; }
+		> .side { width: 50%; }
+		> .side.left { min-width: 400px; }
+		> .side.left { 
+			.inner { 
+				background: var(--color-shape-highlight-medium); display: flex; flex-direction: row; align-items: center; justify-content: center;
+				border-radius: 6px; padding: 12px;
+			}
+		}
 
 		.block.blockMedia { max-height: 100%; }
 		.block.blockMedia {
-			img.media { width: auto; height: auto; max-width: 100%; display: inline-block; object-fit: contain; }
+			.mediaImage { width: auto; height: auto; max-width: 100%; display: inline-block; object-fit: contain; }
 		}
-		.iconObject { width: 100%; height: 100%; border-radius: 6px; background: $colorShapeHighlightMedium; }
 	}
 
 	.blocks {
@@ -41,17 +43,18 @@
 		.descr { @include text-paragraph; word-wrap: break-word; margin-bottom: 10px; }
 		.descr:empty { display: none; }
 
-		.block.blockMedia { padding: 0px; border-radius: 6px; background: $colorShapeHighlightMedium; }
+		.block.blockMedia { padding: 0px; width: 100%; }
 		.block.blockMedia {
 			.wrap { position: static; overflow: visible; width: 100%; height: 100%; }
 			.selectable, .dropTarget { height: 100%; }
+			.pdfWrapper { background: none; box-shadow: unset; padding: 0px; }
 		}
 
 		.block.blockFeatured { padding: 0px; margin: 0px; line-height: 28px; }
 
 		.block.blockRelation {
 			.icon.relation { display: none; }
-			.info .name { color: $colorDarkGrey; }
+			.info .name { color: var(--color-text-secondary); }
 		}
 
 		.buttons { margin: 16px 0px 40px 0px; display: flex; flex-direction: row; gap: 0px 16px; }

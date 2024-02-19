@@ -1,7 +1,7 @@
 import * as React from 'react';
 import raf from 'raf';
 import { observer } from 'mobx-react';
-import { Button, Widget } from 'Component';
+import { Button, Widget, DropTarget } from 'Component';
 import { C, I, M, keyboard, UtilObject, analytics, translate } from 'Lib';
 import { blockStore, menuStore, detailStore } from 'Store';
 import Constant from 'json/constant.json';
@@ -33,22 +33,23 @@ const ListWidget = observer(class ListWidget extends React.Component<Props, Stat
 		super(props);
 
 		this.onEdit = this.onEdit.bind(this);
-		this.addWidget = this.addWidget.bind(this);
 		this.onDragStart = this.onDragStart.bind(this);
 		this.onDragOver = this.onDragOver.bind(this);
 		this.onDrop = this.onDrop.bind(this);
 		this.onScroll = this.onScroll.bind(this);
 		this.onContextMenu = this.onContextMenu.bind(this);
-		this.setPreview = this.setPreview.bind(this);
-		this.setEditing = this.setEditing.bind(this);
 		this.onLibrary = this.onLibrary.bind(this);
 		this.onArchive = this.onArchive.bind(this);
+		this.onAdd = this.onAdd.bind(this);
+		this.setEditing = this.setEditing.bind(this);
+		this.setPreview = this.setPreview.bind(this);
 	};
 
 	render(): React.ReactNode {
 		const { isEditing, previewId } = this.state;
 		const { widgets } = blockStore;
 		const cn = [ 'listWidget' ];
+		const canWrite = UtilObject.canParticipantWrite();
 
 		let content = null;
 
@@ -95,29 +96,49 @@ const ListWidget = observer(class ListWidget extends React.Component<Props, Stat
 				return true;
 			});
 
+			let last = null;
+			let first = null;
+
+			if (blocks.length) {
+				first = blocks[0];
+				last = blocks[blocks.length - 1];
+			};
+
 			if (isEditing) {
 				cn.push('isEditing');
 			};
 
 			if (isEditing) {
 				if (blocks.length <= Constant.limit.widgets) {
-					buttons.push({ id: 'widget-list-add', text: translate('commonAdd'), onClick: this.addWidget });
+					buttons.push({ id: 'widget-list-add', text: translate('commonAdd'), onMouseDown: this.onAdd });
 				};
 
-				buttons.push({ id: 'widget-list-done', text: translate('commonDone'), onClick: this.onEdit });
-			} else {
-				buttons.push({ id: 'widget-list-edit', className: 'edit c28', text: translate('widgetEdit'), onClick: this.onEdit });
+				buttons.push({ id: 'widget-list-done', text: translate('commonDone'), onMouseDown: this.onEdit });
+			} else 
+			if (canWrite) {
+				buttons.push({ id: 'widget-list-edit', className: 'edit c28', text: translate('widgetEdit'), onMouseDown: this.onEdit });
 			};
 
 			content = (
 				<React.Fragment>
-					<Widget 
-						block={new M.Block({ id: 'widget-space', type: I.BlockType.Widget, content: { layout: I.WidgetLayout.Space } })} 
-						disableContextMenu={true} 
-						onDragStart={this.onDragStart}
-						onDragOver={this.onDragOver}
-						isEditing={isEditing}
-					/>
+					<DropTarget 
+						{...this.props} 
+						isTargetTop={true}
+						rootId={blockStore.widgets} 
+						id={first?.id}
+						dropType={I.DropType.Widget} 
+						canDropMiddle={false}
+						className="firstTarget"
+						cacheKey="firstTarget"
+					>
+						<Widget 
+							block={new M.Block({ id: 'widget-space', type: I.BlockType.Widget, content: { layout: I.WidgetLayout.Space } })} 
+							disableContextMenu={true} 
+							onDragStart={this.onDragStart}
+							onDragOver={this.onDragOver}
+							isEditing={isEditing}
+						/>
+					</DropTarget>
 
 					{blocks.map((block, i) => (
 						<Widget 
@@ -133,21 +154,31 @@ const ListWidget = observer(class ListWidget extends React.Component<Props, Stat
 						/>
 					))}
 
-					<Button 
-						text={translate('widgetLibrary')}
-						color="" 
-						className="widget" 
-						icon="store" 
-						onClick={this.onLibrary} 
-					/>
-
-					<Button 
-						text={translate('widgetBin')}
-						color="" 
-						className="widget" 
-						icon="bin" 
-						onClick={this.onArchive} 
-					/>
+					<DropTarget 
+						{...this.props} 
+						isTargetBottom={true}
+						rootId={blockStore.widgets} 
+						id={last?.id}
+						dropType={I.DropType.Widget} 
+						canDropMiddle={false}
+						className="lastTarget"
+						cacheKey="lastTarget"
+					>
+						<Button 
+							text={translate('widgetLibrary')}
+							color="" 
+							className="widget" 
+							icon="store" 
+							onClick={this.onLibrary} 
+						/>
+						<Button 
+							text={translate('widgetBin')}
+							color="" 
+							className="widget" 
+							icon="bin" 
+							onClick={this.onArchive} 
+						/>
+					</DropTarget>
 
 					<div className="buttons">
 						{buttons.map(button => (
@@ -177,17 +208,15 @@ const ListWidget = observer(class ListWidget extends React.Component<Props, Stat
 		$(this.node).scrollTop(this.top);
 	};
 
-	onEdit (): void {
-		const { isEditing } = this.state;
-		
-		this.setState({ isEditing: !isEditing });
+	onEdit (e: any): void {
+		e.stopPropagation();
 
-		if (!isEditing) {
-			analytics.event('EditWidget');
-		};
+		this.setEditing(!this.state.isEditing);
 	};
 
-	addWidget (): void {
+	onAdd (e: any): void {
+		e.stopPropagation();
+
 		menuStore.open('widget', {
 			element: '#widget-list-add',
 			className: 'fixed',
@@ -305,7 +334,7 @@ const ListWidget = observer(class ListWidget extends React.Component<Props, Stat
 
 	onContextMenu () {
 		const { previewId } = this.state;
-		if (previewId) {
+		if (previewId || !UtilObject.canParticipantWrite()) {
 			return;
 		};
 
@@ -397,6 +426,34 @@ const ListWidget = observer(class ListWidget extends React.Component<Props, Stat
 
 	setEditing (isEditing: boolean) {
 		this.setState({ isEditing });
+
+		if (!isEditing) {
+			return;
+		};
+
+		const win = $(window);
+		const unbind = () => win.off('mousedown.sidebar keydown.sidebar');
+		const close = e => {
+			e.stopPropagation();
+
+			this.setEditing(false);
+			unbind();
+		};
+
+		unbind();
+		analytics.event('EditWidget');
+
+		window.setTimeout(() => {
+			win.on('mousedown.sidebar', e => {
+				if (!$(e.target).parents('.widget').length) {
+					close(e);
+				};
+			});
+
+			win.on('keydown.sidebar', e => {
+				keyboard.shortcut('escape', e, () => close(e));
+			});
+		}, Constant.delay.menu);
 	};
 
 });

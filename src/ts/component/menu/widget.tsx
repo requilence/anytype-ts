@@ -3,7 +3,7 @@ import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { MenuItemVertical, Button } from 'Component';
 import { C, I, keyboard, UtilMenu, translate, Action, UtilObject, analytics } from 'Lib';
-import { blockStore, menuStore } from 'Store';
+import { blockStore, menuStore, dbStore } from 'Store';
 import Constant from 'json/constant.json';
 
 const MenuWidget = observer(class MenuWidget extends React.Component<I.Menu> {
@@ -169,7 +169,7 @@ const MenuWidget = observer(class MenuWidget extends React.Component<I.Menu> {
 	};
 
 	checkState () {
-		const setTypes = UtilObject.getSetTypes();
+		const setLayouts = UtilObject.getSetLayouts();
 		const layoutOptions = this.getLayoutOptions().map(it => it.id);
 
 		if (this.isCollection()) {
@@ -178,10 +178,10 @@ const MenuWidget = observer(class MenuWidget extends React.Component<I.Menu> {
 			};
 		} else 
 		if (this.target) {
-			if ([ I.WidgetLayout.List, I.WidgetLayout.Compact ].includes(this.layout) && !setTypes.includes(this.target.type)) {
+			if ([ I.WidgetLayout.List, I.WidgetLayout.Compact ].includes(this.layout) && !setLayouts.includes(this.target.layout)) {
 				this.layout = I.WidgetLayout.Tree;
 			};
-			if ((this.layout == I.WidgetLayout.Tree) && setTypes.includes(this.target.type)) {
+			if ((this.layout == I.WidgetLayout.Tree) && setLayouts.includes(this.target.layout)) {
 				this.layout = I.WidgetLayout.Compact;
 			};
 		};
@@ -217,14 +217,14 @@ const MenuWidget = observer(class MenuWidget extends React.Component<I.Menu> {
 
 		if (this.target) {
 			if (!isCollection) {
-				const setTypes = UtilObject.getSetTypes();
-				const treeSkipTypes = setTypes.concat(UtilObject.getSystemTypes()).concat(UtilObject.getFileTypes());
+				const setLayouts = UtilObject.getSetLayouts();
+				const treeSkipLayouts = setLayouts.concat(UtilObject.getFileAndSystemLayouts()).concat([ I.ObjectLayout.Participant ]);
 
 				// Sets can only become Link and List layouts, non-sets can't become List
-				if (treeSkipTypes.includes(this.target.type)) {
+				if (treeSkipLayouts.includes(this.target.layout)) {
 					options = options.filter(it => it != I.WidgetLayout.Tree);
 				};
-				if (!setTypes.includes(this.target.type)) {
+				if (!setLayouts.includes(this.target.layout)) {
 					options = options.filter(it => ![ I.WidgetLayout.List, I.WidgetLayout.Compact ].includes(it) );
 				};
 			};
@@ -281,8 +281,10 @@ const MenuWidget = observer(class MenuWidget extends React.Component<I.Menu> {
 
 		switch (item.itemId) {
 			case 'source': {
+				const templateType = dbStore.getTemplateType();
 				const filters: I.Filter[] = [
-					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemTypes().concat(UtilObject.getFileTypes()) },
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemLayouts() },
+					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotEqual, value: templateType?.id },
 				];
 
 				menuId = 'searchObject';
@@ -326,7 +328,7 @@ const MenuWidget = observer(class MenuWidget extends React.Component<I.Menu> {
 					options: this.getLayoutOptions(),
 					value: this.layout,
 					onSelect: (e, option) => {
-						this.layout = option.id;
+						this.layout = Number(option.id);
 						this.checkState();
 						this.forceUpdate();
 						

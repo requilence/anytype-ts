@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
 import { IconObject, ObjectName } from 'Component';
-import { I, UtilObject, translate } from 'Lib';
-import { commonStore, popupStore } from 'Store';
+import { I, C, UtilObject, translate } from 'Lib';
+import { popupStore, commonStore } from 'Store';
 	
 const WidgetSpace = observer(class WidgetSpace extends React.Component<I.WidgetComponent> {
 
@@ -15,23 +15,23 @@ const WidgetSpace = observer(class WidgetSpace extends React.Component<I.WidgetC
 	};
 
 	render (): React.ReactNode {
-		const space = UtilObject.getSpace();
+		const space = UtilObject.getSpaceview();
 
 		return (
 			<div className="body" onClick={this.onOpenSettings}>
 				<IconObject 
 					id="widget-space-icon" 
-					object={{ ...space, layout: I.ObjectLayout.Space }} 
+					object={{ ...space, layout: I.ObjectLayout.SpaceView }} 
 					forceLetter={true} 
 					size={36}
 					canEdit={true} 
-					onSelect={this.onSelect} 
+					onSelect={this.onSelect}
 					onUpload={this.onUpload}
 					menuParam={{ className: 'fixed' }}
 				/>
 				<div className="txt">
 					<ObjectName object={space} />
-					<div className="type">{translate(`spaceType${space.spaceType}`)}</div>
+					{space && !space._empty_ ? <div className="type">{translate(`spaceAccessType${space.spaceAccessType}`)}</div> : ''}
 				</div>
 			</div>
 		);
@@ -43,12 +43,12 @@ const WidgetSpace = observer(class WidgetSpace extends React.Component<I.WidgetC
 		popupStore.open('settings', { data: { page: 'spaceIndex', isSpace: true }, className: 'isSpace' });
 	};
 
-	onSelect (icon: string) {
-		UtilObject.setIcon(commonStore.workspace, icon, '');
+	onSelect () {
+		C.WorkspaceSetInfo(commonStore.space, { iconImage: '' });
 	};
 
-	onUpload (hash: string) {
-		UtilObject.setIcon(commonStore.workspace, '', hash);
+	onUpload (objectId: string) {
+		C.WorkspaceSetInfo(commonStore.space, { iconImage: objectId });
 	};
 
 });

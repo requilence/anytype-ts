@@ -37,6 +37,7 @@ module.exports = {
 		'no-case-declarations': 'off',
 		'no-console': 'off',
 		'no-var': 'warn',
+		'no-extra-semi': 'off',
 
 		// unused vars
 		'no-unused-vars': 'off',
@@ -49,6 +50,7 @@ module.exports = {
 			},
 		],
 
+		'@typescript-eslint/no-namespace': 'off',
 		'@typescript-eslint/no-unsafe-member-access': 'off',
 		'@typescript-eslint/no-extra-semi': 'off',
 		'@typescript-eslint/no-empty-function': 'off',

@@ -24,7 +24,7 @@ const BlockTableOfContents = observer(class BlockTableOfContents extends React.C
 			return (
 				<div 
 					className="item" 
-					onClick={(e: any) => { this.onClick(e, item.id); }}
+					onClick={e => this.onClick(e, item.id)}
 					style={{ paddingLeft: item.depth * 24 }}
 				>
 					<span>{item.text}</span>
@@ -72,8 +72,7 @@ const BlockTableOfContents = observer(class BlockTableOfContents extends React.C
 	};
 
 	onFocus () {
-		const { block } = this.props;
-		focus.set(block.id, { from: 0, to: 0 });
+		focus.set(this.props.block.id, { from: 0, to: 0 });
 	};
 
 	getTree () {
@@ -106,7 +105,7 @@ const BlockTableOfContents = observer(class BlockTableOfContents extends React.C
 			list.push({ 
 				depth, 
 				id: block.id,
-				text: String(block.content.text || UtilObject.defaultName('Page')),
+				text: String(block.content.text || translate('defaultNamePage')),
 			});
 		});
 		return list;

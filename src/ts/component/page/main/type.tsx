@@ -2,10 +2,10 @@ import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { Icon, Header, Footer, Loader, ListObjectPreview, ListObject, Select, Deleted } from 'Component';
-import { I, C, UtilData, UtilObject, UtilMenu, UtilCommon, focus, Action, analytics, Relation, translate } from 'Lib';
-import { commonStore, detailStore, dbStore, menuStore, popupStore, blockStore } from 'Store';
-import Controls from 'Component/page/head/controls';
-import HeadSimple from 'Component/page/head/simple';
+import { I, C, UtilData, UtilObject, UtilMenu, UtilCommon, focus, Action, analytics, Relation, translate, UtilDate, UtilRouter, Storage } from 'Lib';
+import { commonStore, detailStore, dbStore, menuStore, blockStore } from 'Store';
+import Controls from 'Component/page/elements/head/controls';
+import HeadSimple from 'Component/page/elements/head/simple';
 import Constant from 'json/constant.json';
 import Errors from 'json/error.json';
 
@@ -20,6 +20,7 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 	id = '';
 	refHeader: any = null;
 	refHead: any = null;
+	refControls: any = null;
 	refListPreview: any = null;
 	timeout = 0;
 	page = 0;
@@ -47,10 +48,6 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 			return <Deleted {...this.props} />;
 		};
 
-		if (isLoading) {
-			return <Loader id="loader" />;
-		};
-
 		const { config } = commonStore;
 		const rootId = this.getRootId();
 		const check = UtilData.checkDetails(rootId);
@@ -66,10 +63,14 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 		const allowedDetails = object.isInstalled && blockStore.checkFlags(rootId, rootId, [ I.RestrictionObject.Details ]);
 		const allowedRelation = object.isInstalled && blockStore.checkFlags(rootId, rootId, [ I.RestrictionObject.Relation ]);
 		const allowedTemplate = object.isInstalled && allowedObject && showTemplates;
-		const allowedLayout = rootId != Constant.typeId.bookmark;
+		const allowedLayout = object.recommendedLayout != I.ObjectLayout.Bookmark;
 		
-		const totalObject = dbStore.getMeta(this.getSubIdObject(), '').total;
+		const subIdObject = this.getSubIdObject();
+		const totalObject = dbStore.getMeta(subIdObject, '').total;
 		const totalTemplate = templates.length + (allowedTemplate ? 1 : 0);
+		const filtersObject: I.Filter[] = [
+			{ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.Equal, value: this.getSpaceId() },
+		];
 
 		if (!recommendedRelations.includes('rel-description')) {
 			recommendedRelations.push('rel-description');
@@ -85,11 +86,11 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 			return config.debug.ho ? true : !it.isHidden;
 		});
 
-		const isFileType = UtilObject.isFileType(rootId);
+		const isFileType = UtilObject.isFileLayout(object.recommendedLayout);
 		const columns: any[] = [
 			{ 
 				relationKey: 'lastModifiedDate', name: translate('commonUpdated'),
-				mapper: (v: any) => UtilCommon.date(UtilData.dateFormat(I.DateFormat.MonthAbbrBeforeDay), v),
+				mapper: (v: any) => v ? UtilDate.date(UtilDate.dateFormat(I.DateFormat.MonthAbbrBeforeDay), v) : '',
 			},
 		];
 
@@ -99,7 +100,7 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 
 		const ItemRelation = (item: any) => (
 			<div id={'item-' + item.id} className={[ 'item', (item.isHidden ? 'isHidden' : ''), 'canEdit' ].join(' ')}>
-				<div className="clickable" onClick={(e: any) => { this.onRelationEdit(e, item.id); }}>
+				<div className="clickable" onClick={e => this.onRelationEdit(e, item.id)}>
 					<Icon className={[ 'relation', Relation.className(item.format) ].join(' ')} />
 					<div className="name">{item.name}</div>
 				</div>
@@ -120,9 +121,16 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 			<div>
 				<Header component="mainObject" ref={ref => this.refHeader = ref} {...this.props} rootId={rootId} />
 
+				{isLoading ? <Loader id="loader" /> : ''}
+
 				<div className={[ 'blocks', 'wrapper', check.className ].join(' ')}>
-					<Controls key="editorControls" {...this.props} rootId={rootId} resize={() => {}} />
-					<HeadSimple ref={ref => this.refHead = ref} type="Type" rootId={rootId} onCreate={this.onCreate} />
+					<Controls ref={ref => this.refControls = ref} key="editorControls" {...this.props} rootId={rootId} resize={() => {}} />
+					<HeadSimple 
+						{...this.props} 
+						ref={ref => this.refHead = ref} 
+						placeholder={translate('defaultNameType')} 
+						rootId={rootId} onCreate={this.onCreate} 
+					/>
 
 					{showTemplates ? (
 						<div className="section template">
@@ -164,47 +172,50 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 						<div className="content"></div>
 					</div>
 
-					{allowedObject ? (
-						<React.Fragment>
-							{allowedLayout ? (
-								<div className="section layout">
-									<div className="title">{translate('pageMainTypeRecommendedLayout')}</div>
-									<div className="content">
-										{allowedDetails ? (
-											<Select 
-												id="recommendedLayout" 
-												value={object.recommendedLayout} 
-												options={UtilMenu.turnLayouts()} 
-												arrowClassName="light" 
-												onChange={this.onLayout} 
-											/>
-										) : (
-											<React.Fragment>
-												<Icon className={layout.icon} />
-												<div className="name">{layout.name}</div>
-											</React.Fragment>
-										)}
-									</div>
-								</div>
-							) : ''}
-
-							<div className="section relation">
-								<div className="title">{relations.length} {UtilCommon.plural(relations.length, translate('pluralRelation'))}</div>
-								<div className="content">
-									{relations.map((item: any, i: number) => (
-										<ItemRelation key={i} {...item} />
-									))}
-									{allowedRelation ? <ItemAdd /> : ''}
-								</div>
+					{allowedLayout ? (
+						<div className="section layout">
+							<div className="title">{translate('pageMainTypeRecommendedLayout')}</div>
+							<div className="content">
+								{allowedDetails ? (
+									<Select 
+										id="recommendedLayout" 
+										value={object.recommendedLayout} 
+										options={UtilMenu.turnLayouts()} 
+										arrowClassName="light" 
+										onChange={this.onLayout} 
+									/>
+								) : (
+									<React.Fragment>
+										<Icon className={layout.icon} />
+										<div className="name">{layout.name}</div>
+									</React.Fragment>
+								)}
 							</div>
-						</React.Fragment>
+						</div>
 					) : ''}
+
+					<div className="section relation">
+						<div className="title">{relations.length} {UtilCommon.plural(relations.length, translate('pluralRelation'))}</div>
+						<div className="content">
+							{relations.map((item: any, i: number) => (
+								<ItemRelation key={i} {...item} />
+							))}
+							{allowedRelation ? <ItemAdd /> : ''}
+						</div>
+					</div>
 
 					{object.isInstalled ? (
 						<div className="section set">
 							<div className="title">{totalObject} {UtilCommon.plural(totalObject, translate('pluralObject'))}</div>
 							<div className="content">
-								<ListObject rootId={rootId} columns={columns} />
+								<ListObject 
+									{...this.props} 
+									sources={[ rootId ]} 
+									subId={subIdObject} 
+									rootId={rootId} 
+									columns={columns} 
+									filters={filtersObject} 
+								/>
 							</div>
 						</div>
 					) : ''}
@@ -236,10 +247,11 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 			return;
 		};
 
+		this.close();
 		this.id = rootId;
 		this.setState({ isLoading: true });
 
-		C.ObjectOpen(rootId, '', (message: any) => {
+		C.ObjectOpen(rootId, '', UtilRouter.getRouteSpaceId(), (message: any) => {
 			if (message.error.code) {
 				if (message.error.code == Errors.Code.NOT_FOUND) {
 					this.setState({ isDeleted: true, isLoading: false });
@@ -264,20 +276,22 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 			if (this.refHead) {
 				this.refHead.forceUpdate();
 			};
+			if (this.refControls) {
+				this.refControls.forceUpdate();
+			};
+
+			
 		});
 	};
 
 	loadTemplates () {
-		const { workspace } = commonStore;
 		const rootId = this.getRootId();
-		const object = detailStore.get(rootId, rootId);
 
 		UtilData.searchSubscribe({
 			subId: this.getSubIdTemplate(),
 			filters: [
-				{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.In, value: [ Constant.storeTypeId.template, Constant.typeId.template ] },
+				{ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.Equal, value: this.getSpaceId() },
 				{ operator: I.FilterOperator.And, relationKey: 'targetObjectType', condition: I.FilterCondition.Equal, value: rootId },
-				{ operator: I.FilterOperator.And, relationKey: 'workspaceId', condition: I.FilterCondition.Equal, value: object.isInstalled ? workspace : Constant.storeSpaceId },
 			],
 			sorts: [
 				{ relationKey: 'lastModifiedDate', type: I.SortType.Desc },
@@ -289,16 +303,19 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 	};
 
 	close () {
+		if (!this.id) {
+			return;
+		};
+
 		const { isPopup, match } = this.props;
-		const rootId = this.getRootId();
 		
 		let close = true;
-		if (isPopup && (match.params.id == rootId)) {
+		if (isPopup && (match.params.id == this.id)) {
 			close = false;
 		};
 
 		if (close) {
-			Action.pageClose(rootId, true);
+			Action.pageClose(this.id, true);
 		};
 	};
 
@@ -306,12 +323,11 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 		const rootId = this.getRootId();
 		const object = detailStore.get(rootId, rootId);
 		const details: any = { 
-			type: Constant.typeId.template, 
 			targetObjectType: rootId,
 			layout: object.recommendedLayout,
 		};
 
-		C.ObjectCreate(details, [], '', (message) => {
+		C.ObjectCreate(details, [], '', Constant.typeKey.template, commonStore.space, (message) => {
 			if (message.error.code) {
 				return;
 			};
@@ -331,17 +347,17 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 
 	onCreate () {
 		const rootId = this.getRootId();
-		const type = dbStore.getType(rootId);
+		const type = dbStore.getTypeById(rootId);
 		if (!type) {
 			return;
 		};
 
-		const isSetType = UtilObject.isSetType(rootId);
-		const allowedObject = UtilObject.getPageLayouts().includes(type.recommendedLayout) || isSetType;
+		const isSetLayout = UtilObject.isSetLayout(type.recommendedLayout);
+		const allowedObject = UtilObject.getPageLayouts().includes(type.recommendedLayout) || isSetLayout;
 		const options = [];
 
 		if (allowedObject) {
-			options.push({ id: 'object', name: translate('pageMainTypeNewObject') });
+			options.push({ id: 'object', name: translate('commonNewObject') });
 		};
 
 		options.push({ id: 'set', name: translate('pageMainTypeNewSetOfObjects') });
@@ -355,7 +371,7 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 				onSelect: (e: any, item: any) => {
 					switch (item.id) {
 						case 'object':
-							if (rootId == Constant.typeId.bookmark) {
+							if (type.recommendedLayout == I.ObjectLayout.Bookmark) {
 								this.onBookmarkAdd();
 							} else {
 								this.onObjectAdd();
@@ -374,18 +390,19 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 	onObjectAdd () {
 		const rootId = this.getRootId();
 		const object = detailStore.get(rootId, rootId);
-		const details: any = {
-			type: rootId,
+		const type = dbStore.getTypeById(rootId);
+
+		if (!type) {
+			return;
+		};
+		
+		const details: any = {};
+
+		if (UtilObject.isSetLayout(object.recommendedLayout)) {
+			details.layout = object.recommendedLayout;
 		};
 
-		if (rootId == Constant.typeId.set) {
-			details.layout = I.ObjectLayout.Set;
-		} else
-		if (rootId == Constant.typeId.collection) {
-			details.layout = I.ObjectLayout.Collection;
-		};
-
-		C.ObjectCreate(details, [], object.defaultTemplateId, (message: any) => {
+		C.ObjectCreate(details, [ I.ObjectFlag.SelectTemplate ], object.defaultTemplateId, type.uniqueKey, commonStore.space, (message: any) => {
 			if (message.error.code) {
 				return;
 			};
@@ -412,11 +429,11 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 		const rootId = this.getRootId();
 		const object = detailStore.get(rootId, rootId);
 		const details = { 
-			name: object.name + ' set', 
+			name: UtilCommon.sprintf(translate('commonSetName'), object.name),
 			iconEmoji: object.iconEmoji,
 		};
 
-		C.ObjectCreateSet([ rootId ], details, '', (message: any) => {
+		C.ObjectCreateSet([ rootId ], details, '', commonStore.space, (message: any) => {
 			if (!message.error.code) {
 				focus.clear(true);
 				UtilObject.openPopup(message.details);
@@ -427,8 +444,9 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 	onRelationAdd (e: any) {
 		const rootId = this.getRootId();
 		const object = detailStore.get(rootId, rootId);
+		const skipSystemKeys = [ 'tag', 'description', 'source' ];
 		const recommendedKeys = object.recommendedRelations.map(id => dbStore.getRelationById(id)).map(it => it && it.relationKey);
-		const systemKeys = Relation.systemKeys().filter(it => ![ 'tag', 'description', 'source' ].includes(it));
+		const systemKeys = Relation.systemKeys().filter(it => !skipSystemKeys.includes(it));
 
 		menuStore.open('relationSuggest', { 
 			element: '#page .section.relation #item-add',
@@ -513,7 +531,7 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 		menuStore.closeAll(Constant.menuIds.dataviewTemplate, () => {
 			menuStore.open('dataviewTemplateContext', {
 				menuKey: item.id,
-				element: `#item-${item.id} .more`,
+				element: `#item-more-${item.id}`,
 				vertical: I.MenuDirection.Bottom,
 				horizontal: I.MenuDirection.Right,
 				onOpen: () => $(`#item-${item.id}`).addClass('active'),
@@ -542,6 +560,13 @@ const PageMainType = observer(class PageMainType extends React.Component<I.PageC
 	getRootId () {
 		const { rootId, match } = this.props;
 		return rootId ? rootId : match.params.id;
+	};
+
+	getSpaceId () {
+		const rootId = this.getRootId();
+		const object = detailStore.get(rootId, rootId, [ 'spaceId' ], true);
+
+		return object.spaceId;
 	};
 
 	getSubIdTemplate () {

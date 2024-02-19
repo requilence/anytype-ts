@@ -202,8 +202,7 @@ const MenuOnboarding = observer(class MenuSelect extends React.Component<I.Menu,
 	};
 
 	onKeyDown (e: any) {
-		keyboard.shortcut('arrowleft', e, () => this.onArrow(e, -1));
-		keyboard.shortcut('arrowright', e, () => this.onArrow(e, 1));
+		keyboard.shortcut('arrowleft, arrowright', e, (pressed: string) => this.onArrow(e, pressed == 'arrowleft' ? -1 : 1));
 	};
 
 	onButton (e: any, action: string) {
@@ -224,12 +223,6 @@ const MenuOnboarding = observer(class MenuSelect extends React.Component<I.Menu,
 
 			case 'import': {
 				this.onImport();
-				break;
-			};
-
-			case 'dashboard': {
-				close();
-				UtilObject.openHome('route');
 				break;
 			};
 
@@ -271,7 +264,7 @@ const MenuOnboarding = observer(class MenuSelect extends React.Component<I.Menu,
 		const section = Onboarding.getSection(key);
 		const { items } = section;
 
-		if ((dir < 0) && (current == 0)) {
+		if ((dir < 0) && !current) {
 			return;
 		};
 
@@ -338,6 +331,8 @@ const MenuOnboarding = observer(class MenuSelect extends React.Component<I.Menu,
 				};
 			}
 		});
+
+		analytics.event('ScreenOnboardingVideo');
 	};
 
 	onImport () {

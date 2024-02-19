@@ -1,4 +1,5 @@
 import * as React from 'react';
+import $ from 'jquery';
 import { I, UtilCommon, Preview } from 'Lib';
 import { Icon, Loader } from 'Component';
 
@@ -28,7 +29,7 @@ class Button extends React.Component<I.ButtonComponent, State> {
 	};
 
 	render () {
-		const { id, type, subType, icon, arrow, text, className, color, onClick, dataset } = this.props;
+		const { id, type, subType, icon, arrow, text, className, color, onMouseDown, onClick, dataset } = this.props;
 		const cn = [ 'button', color, className ];
 		const { isLoading } = this.state;
 
@@ -46,14 +47,15 @@ class Button extends React.Component<I.ButtonComponent, State> {
 						ref={node => this.node = node}
 						id={id} 
 						className={cn.join(' ')} 
-						onMouseDown={onClick} 
+						onClick={onClick}
+						onMouseDown={onMouseDown} 
 						onMouseEnter={this.onMouseEnter} 
 						onMouseLeave={this.onMouseLeave}
 						{...UtilCommon.dataProps(dataset)}
 					>
-						{isLoading ? <Loader type="loader" /> : ''}
+						{isLoading ? <Loader /> : ''}
 						{icon ? <Icon className={icon} /> : ''}
-						<div className="txt" dangerouslySetInnerHTML={{ __html: text }} />
+						<div className="txt" dangerouslySetInnerHTML={{ __html: UtilCommon.sanitize(text) }} />
 						{arrow ? <div className="arrow" /> : ''}
 					</div>
 				);
@@ -98,6 +100,11 @@ class Button extends React.Component<I.ButtonComponent, State> {
 
 	setLoading (v: boolean) {
 		this.setState({ isLoading: v });
+	};
+
+	setDisabled (v: boolean) {
+		const node = $(this.node);
+		v ? node.addClass('disabled') : node.removeClass('disabled');
 	};
 	
 };

@@ -2,29 +2,29 @@
 
 .menus {
 	.menu {
-		.icon.textParagraph { background-image: url('~img/icon/menu/action/block/paragraph0.svg'); }
-		.icon.textHeader1 { background-image: url('~img/icon/menu/action/block/header10.svg'); }
-		.icon.textHeader2 { background-image: url('~img/icon/menu/action/block/header20.svg'); }
-		.icon.textHeader3 { background-image: url('~img/icon/menu/action/block/header30.svg'); }
-		.icon.textQuote { background-image: url('~img/icon/menu/action/block/quote0.svg'); }
-		.icon.textCallout { background-image: url('~img/icon/menu/action/block/callout0.svg'); }
-		
-		.icon.textBulleted { background-image: url('~img/icon/menu/action/block/bulleted0.svg'); }
-		.icon.textCheckbox { background-image: url('~img/icon/menu/action/block/checkbox0.svg'); }
-		.icon.textNumbered { background-image: url('~img/icon/menu/action/block/numbered0.svg'); }
-		.icon.textToggle { background-image: url('~img/icon/menu/action/block/toggle0.svg'); }
+		.icon.textParagraph { background-image: url('~img/icon/menu/action/block/text/paragraph0.svg'); }
+		.icon.textHeader1 { background-image: url('~img/icon/menu/action/block/text/header10.svg'); }
+		.icon.textHeader2 { background-image: url('~img/icon/menu/action/block/text/header20.svg'); }
+		.icon.textHeader3 { background-image: url('~img/icon/menu/action/block/text/header30.svg'); }
+		.icon.textQuote { background-image: url('~img/icon/menu/action/block/text/quote0.svg'); }
+		.icon.textCallout { background-image: url('~img/icon/menu/action/block/text/callout0.svg'); }
+		.icon.textBulleted { background-image: url('~img/icon/menu/action/block/text/bulleted0.svg'); }
+		.icon.textCheckbox { background-image: url('~img/icon/menu/action/block/text/checkbox0.svg'); }
+		.icon.textNumbered { background-image: url('~img/icon/menu/action/block/text/numbered0.svg'); }
+		.icon.textToggle { background-image: url('~img/icon/menu/action/block/text/toggle0.svg'); }
+
+		.icon.divLine { background-image: url('~img/icon/menu/action/block/div/line0.svg'); }
+		.icon.divDot { background-image: url('~img/icon/menu/action/block/div/dot0.svg'); }
+
+		.icon.mediaFile { background-image: url('~img/icon/menu/action/block/media/file0.svg'); }
+		.icon.mediaImage { background-image: url('~img/icon/menu/action/block/media/image0.svg'); }
+		.icon.mediaVideo { background-image: url('~img/icon/menu/action/block/media/video0.svg'); }
 		
 		.icon.existing { background-image: url('~img/icon/menu/action/block/existing0.svg'); }
 		.icon.linkTo { background-image: url('~img/icon/menu/action/block/linkto0.svg'); }
 		.icon.unlink { background-image: url('~img/icon/menu/action/block/unlink0.svg'); }
-		.icon.file { background-image: url('~img/icon/menu/action/block/file0.svg'); }
-		.icon.image { background-image: url('~img/icon/menu/action/block/image0.svg'); }
-		.icon.video { background-image: url('~img/icon/menu/action/block/video0.svg'); }
 		.icon.bookmark { background-image: url('~img/icon/menu/action/block/bookmark0.svg'); }
 		.icon.code { background-image: url('~img/icon/menu/action/block/code0.svg'); }
-		
-		.icon.div-line { background-image: url('~img/icon/menu/action/block/line0.svg'); }
-		.icon.dot { background-image: url('~img/icon/menu/action/block/dot0.svg'); }
 
 		.icon.bold { background-image: url('~img/icon/menu/action/mark/bold0.svg'); }
 		.icon.italic { background-image: url('~img/icon/menu/action/mark/italic0.svg'); }
@@ -62,6 +62,7 @@
 
 		.icon.clock { background-image: url('~img/icon/menu/action/clock0.svg'); }
 		.icon.settings { background-image: url('~img/icon/menu/action/settings0.svg'); }
+		.icon.viewSettings { background-image: url('~img/icon/dataview/button/settings.svg'); }
 		.icon.expand { background-image: url('~img/icon/menu/action/expand0.svg'); }
 		.icon.source { background-image: url('~img/icon/menu/action/source0.svg'); }
 		.icon.editText { background-image: url('~img/icon/menu/action/editText0.svg'); }
@@ -82,6 +83,9 @@
 		.icon.unlink { background-image: url('~img/icon/menu/action/unlink0.svg'); }
 		.icon.store { background-image: url('~img/icon/menu/action/store0.svg'); }
 		.icon.pencil { background-image: url('~img/icon/menu/action/pencil0.svg'); }
+		.icon.createWidget { background-image: url('~img/icon/menu/action/createWidget0.svg'); }
+		.icon.clipboard { background-image: url('~img/icon/menu/action/clipboard0.svg'); }
+		.icon.image { background-image: url('~img/icon/menu/action/image0.svg'); }
 
 		.icon.coverChange { background-image: url('~img/icon/cover/change.svg'); }
 		.icon.coverPosition { background-image: url('~img/icon/cover/position.svg'); }
@@ -125,21 +129,21 @@
 		.icon.color {
 			.inner { 
 				width: 16px; height: 16px; position: absolute; left: 50%; top: 50%; margin: -8px 0px 0px -8px; border-radius: 100%;
-				background: $colorTextPrimary; 
+				background: var(--color-text-primary); 
 			}
-			.inner.bgColor-default { box-shadow: 0px 0px 0px 1px $colorShapeSecondary inset; background: $colorBgPrimary; }
+			.inner.bgColor-default { box-shadow: 0px 0px 0px 1px var(--color-shape-secondary) inset; background: var(--color-bg-primary); }
 			
-			.inner.textColor-black { background: $colorTextPrimary; }
-			.inner.textColor-grey { background: $colorMediumGrey; }
-			.inner.textColor-yellow { background: $colorYellow; }
-			.inner.textColor-orange { background: $colorOrange; }
-			.inner.textColor-red { background: $colorRed; }
-			.inner.textColor-pink { background: $colorPink; }
-			.inner.textColor-purple { background: $colorPurple; }
-			.inner.textColor-blue { background: $colorBlue; }
-			.inner.textColor-ice { background: $colorIce; }
-			.inner.textColor-teal { background: $colorTeal; }
-			.inner.textColor-lime { background: $colorLime; }
+			.inner.textColor-black { background: var(--color-text-primary); }
+			.inner.textColor-grey { background: var(--color-control-active); }
+			.inner.textColor-yellow { background: var(--color-yellow); }
+			.inner.textColor-orange { background: var(--color-orange); }
+			.inner.textColor-red { background: var(--color-red); }
+			.inner.textColor-pink { background: var(--color-pink); }
+			.inner.textColor-purple { background: var(--color-purple); }
+			.inner.textColor-blue { background: var(--color-blue); }
+			.inner.textColor-ice { background: var(--color-ice); }
+			.inner.textColor-teal { background: var(--color-teal); }
+			.inner.textColor-lime { background: var(--color-lime); }
 		}
 	}
 }

@@ -18,10 +18,7 @@ enum View {
 
 const cmd = keyboard.cmdSymbol();
 const alt = keyboard.altSymbol();
-const Tabs = [
-	{ id: I.StoreTab.Type, name: translate('pageMainStoreTypes'), tooltipCaption: `${cmd} + T` },
-	{ id: I.StoreTab.Relation, name: translate('pageMainStoreRelations'), tooltipCaption: `${cmd} + ${alt} + T` },
-];
+
 
 const PageMainStore = observer(class PageMainStore extends React.Component<I.PageComponent, State> {
 
@@ -36,7 +33,7 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 	cache: any = null;
 	refList: any = null;
 	refFilter: any = null;
-	tab: I.StoreTab = I.StoreTab.Type;
+	tab: I.StoreTab = null;
 	view: View = View.Marketplace;
 	frame = 0;
 	limit = 0;
@@ -68,6 +65,10 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 		const sources = this.getSources();
 		const limit = this.getLimit();
 		const length = items.length;
+		const tabs = [
+			{ id: I.StoreTab.Type, name: translate('pageMainStoreTypes'), tooltipCaption: `${cmd} + T` },
+			{ id: I.StoreTab.Relation, name: translate('pageMainStoreRelations'), tooltipCaption: `${cmd} + ${alt} + T` },
+		];
 
 		let title = '';
 		let placeholder = '';
@@ -122,7 +123,7 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 					<div 
 						key={item.id} 
 						className={[ 'tab', (item.id == this.view ? 'active' : '') ].join(' ')} 
-						onClick={(e: any) => { this.onView(item.id, true); }}
+						onClick={() => this.onView(item.id, true)}
 					>
 						{item.name}
 					</div>
@@ -149,14 +150,14 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 					if (sources.includes(item.id)) {
 						icons.push({ className: 'check', tooltip: textInstalled });
 					} else {
-						icons.push({ className: 'plus', tooltip: textInstall, onClick: (e: any) => { this.onInstall(e, item); } });
+						icons.push({ className: 'plus', tooltip: textInstall, onClick: e => this.onInstall(e, item) });
 					};
 					break;
 			};
 			
 			return (
 				<div className={cn.join(' ')}>
-					<div className="flex" onClick={(e: any) => { this.onClick(e, item); }}>
+					<div className="flex" onClick={e => this.onClick(e, item)}>
 						<IconObject iconSize={iconSize} object={item} />
 						<div className="name">{item.name}</div>
 					</div>
@@ -213,7 +214,7 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 				ref={node => this.node = node}
 				className={[ 'wrapper', this.tab, this.view ].join(' ')}
 			>
-				<Header component="mainStore" {...this.props} tabs={Tabs} tab={this.tab} onTab={id => this.onTab(id, true)} />
+				<Header component="mainStore" {...this.props} tabs={tabs} tab={this.tab} onTab={id => this.onTab(id, true)} />
 
 				<div className="body">
 					<div className="items">
@@ -321,8 +322,12 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 	onTab (id: any, isInner: boolean) {
 		const { isPopup } = this.props;
 
+		if (this.tab == id) {
+			return;
+		};
+
 		this.tab = id;
-		this.onView(Storage.get('viewStore') || View.Library, isInner);
+		this.onView(Storage.get('viewStore') || View.Library, isInner, true);
 
 		Storage.set('tabStore', id);
 
@@ -339,7 +344,11 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 		};
 	};
 
-	onView (id: View, isInner: boolean) {
+	onView (id: View, isInner: boolean, isChangeTab: boolean = false) {
+		if (!isChangeTab && (this.view == id)) {
+			return;
+		};
+
 		this.view = id;
 		this.getData(true);
 
@@ -354,7 +363,7 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 	};
 
 	onCreateType (e: any) {
-		C.ObjectCreateObjectType({}, [ I.ObjectFlag.DeleteEmpty ], (message: any) => {
+		C.ObjectCreateObjectType({}, [ I.ObjectFlag.DeleteEmpty ], commonStore.space, (message: any) => {
 			if (!message.error.code) {
 				this.onClick(e, message.details);
 				analytics.event('CreateType');
@@ -445,23 +454,24 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 	};
 
 	getData (clear: boolean, callBack?: (message: any) => void) {
-		const { workspace } = commonStore;
+		const { space } = commonStore;
 		const filters: I.Filter[] = [
-			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: this.getTabType() },
+			{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: this.getTabLayout() },
 		];
 		const sorts: I.Sort[] = [
 			{ type: I.SortType.Desc, relationKey: 'createdDate' },
+			{ type: I.SortType.Asc, relationKey: 'name' },
 		];
 
 		let keys: string[] = Constant.defaultRelationKeys;
 
 		switch (this.view) {
 			case View.Marketplace:
-				filters.push({ operator: I.FilterOperator.And, relationKey: 'workspaceId', condition: I.FilterCondition.Equal, value: Constant.storeSpaceId });
+				filters.push({ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.Equal, value: Constant.storeSpaceId });
 				break;
 
 			case View.Library:
-				filters.push({ operator: I.FilterOperator.And, relationKey: 'workspaceId', condition: I.FilterCondition.Equal, value: workspace });
+				filters.push({ operator: I.FilterOperator.And, relationKey: 'spaceId', condition: I.FilterCondition.Equal, value: space });
 				break;
 		};
 
@@ -497,40 +507,21 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 		});
 	};
 
-	getTabType () {
-		let type = '';
-		switch (this.view) {
-			case View.Marketplace:
-				switch (this.tab) {
-					case I.StoreTab.Type:		 type = Constant.storeTypeId.type; break;
-					case I.StoreTab.Relation:	 type = Constant.storeTypeId.relation; break;
-				};
-				break;
+	getTabLayout (): I.ObjectLayout {
+		let layout = null;
 
-			case View.Library:
-				switch (this.tab) {
-					case I.StoreTab.Type:		 type = Constant.typeId.type; break;
-					case I.StoreTab.Relation:	 type = Constant.typeId.relation; break;
-				};
-				break;
+		switch (this.tab) {
+			case I.StoreTab.Type:		 layout = I.ObjectLayout.Type; break;
+			case I.StoreTab.Relation:	 layout = I.ObjectLayout.Relation; break;
 		};
-		return type;
+
+		return layout;
 	};
 
 	getItems () {
-		const { profile } = blockStore;
 		const { loading } = this.state;
 		const records = dbStore.getRecords(Constant.subId.store, '').map(id => detailStore.get(Constant.subId.store, id));
 		const limit = this.getLimit();
-
-		records.sort((c1: any, c2: any) => {
-			const cr1 = c1.creator;
-			const cr2 = c2.creator;
-
-			if ((cr1 == profile) && (cr2 != profile)) return -1;
-			if ((cr1 != profile) && (cr2 == profile)) return 1;
-			return 0;
-		});
 
 		let ret: any[] = [
 			{ id: 'mid', className: 'block', children: [ { id: 'mid' } ] },
@@ -612,9 +603,6 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 	};
 
 	onScroll ({ scrollTop }) {
-		const win = $(window);
-		const menus = menuStore.list.filter(it => Constant.menuIds.store.includes(it.id));
-
 		if (scrollTop) {
 			this.top = scrollTop;
 		};
@@ -623,9 +611,7 @@ const PageMainStore = observer(class PageMainStore extends React.Component<I.Pag
 			this.refFilter.forceUpdate();
 		};
 
-		for (const menu of menus) {
-			win.trigger('resize.' + UtilCommon.toCamelCase(`menu-${menu.id}`));
-		};
+		menuStore.resizeAll();
 	};
 
 	getLimit () {

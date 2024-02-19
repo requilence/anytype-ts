@@ -1,11 +1,12 @@
 import * as Sentry from '@sentry/browser';
+import $ from 'jquery';
 import arrayMove from 'array-move';
-import { observable } from 'mobx';
-import Commands from 'protobuf/pb/protos/commands_pb';
-import Events from 'protobuf/pb/protos/events_pb';
-import Service from 'protobuf/pb/protos/service/service_grpc_web_pb';
-import { authStore, commonStore, blockStore, detailStore, dbStore, popupStore } from 'Store';
-import { UtilCommon, I, M, translate, analytics, Renderer, Action, Dataview, Preview, Mapper, Decode } from 'Lib';
+import { observable, set } from 'mobx';
+import Commands from 'dist/lib/pb/protos/commands_pb';
+import Events from 'dist/lib/pb/protos/events_pb';
+import Service from 'dist/lib/pb/protos/service/service_grpc_web_pb';
+import { authStore, commonStore, blockStore, detailStore, dbStore, notificationStore } from 'Store';
+import { UtilCommon, UtilObject, I, M, translate, analytics, Renderer, Action, Dataview, Preview, Mapper, Decode, UtilRouter, Storage } from 'Lib';
 import * as Response from './response';
 import { ClientReadableStream } from 'grpc-web';
 import Constant from 'json/constant.json';
@@ -21,8 +22,8 @@ const SORT_IDS = [
 	'blockDataviewViewSet',
 	'blockDataviewViewDelete',
 ];
-const SKIP_IDS = [];
-const SKIP_SENTRY_ERRORS = [ 'LinkPreview' ];
+const SKIP_IDS = [ 'BlockSetCarriage' ];
+const SKIP_SENTRY_ERRORS = [ 'LinkPreview', 'BlockTextSetText' ];
 
 class Dispatcher {
 
@@ -34,15 +35,14 @@ class Dispatcher {
 
 	init (address: string) {
 		this.service = new Service.ClientCommandsClient(address, null, null);
-		this.listenEvents();
-
-		console.log('[Dispatcher].init Server address: ', address);
 	};
 
 	listenEvents () {
 		if (!authStore.token) {
 			return;
 		};
+
+		window.clearTimeout(this.timeoutStream);
 
 		const request = new Commands.StreamRequest();
 		request.setToken(authStore.token);
@@ -60,25 +60,31 @@ class Dispatcher {
 		this.stream.on('status', (status) => {
 			if (status.code) {
 				console.error('[Dispatcher.stream] Restarting', status);
-				this.listenEvents();
+				this.reconnect();
 			};
 		});
 
 		this.stream.on('end', () => {
 			console.error('[Dispatcher.stream] end, restarting');
-
-			let t = 1000;
-			if (this.reconnects == 20) {
-				t = 5000;
-				this.reconnects = 0;
-			};
-
-			window.clearTimeout(this.timeoutStream);
-			this.timeoutStream = window.setTimeout(() => { 
-				this.listenEvents(); 
-				this.reconnects++;
-			}, t);
+			this.reconnect();
 		});
+	};
+
+	reconnect () {
+		let t = 3;
+		if (this.reconnects == 20) {
+			t = 5;
+		};
+		if (this.reconnects == 40) {
+			t = 60;
+			this.reconnects = 0;
+		};
+
+		window.clearTimeout(this.timeoutStream);
+		this.timeoutStream = window.setTimeout(() => { 
+			this.listenEvents(); 
+			this.reconnects++;
+		}, t * 1000);
 	};
 
 	eventType (v: number): string {
@@ -89,6 +95,7 @@ class Dispatcher {
 		if (v == V.ACCOUNTDETAILS)				 t = 'accountDetails';
 		if (v == V.ACCOUNTUPDATE)				 t = 'accountUpdate';
 		if (v == V.ACCOUNTCONFIGUPDATE)			 t = 'accountConfigUpdate';
+		if (v == V.ACCOUNTLINKCHALLENGE)		 t = 'accountLinkChallenge';
 
 		if (v == V.THREADSTATUS)				 t = 'threadStatus';
 
@@ -145,6 +152,10 @@ class Dispatcher {
 		if (v == V.FILELOCALUSAGE)				 t = 'fileLocalUsage';
 		if (v == V.FILELIMITREACHED)			 t = 'fileLimitReached';
 
+		if (v == V.NOTIFICATIONSEND)			 t = 'notificationSend';
+		if (v == V.NOTIFICATIONUPDATE)			 t = 'notificationUpdate';
+		if (v == V.PAYLOADBROADCAST)			 t = 'payloadBroadcast';
+
 		return t;
 	};
 
@@ -152,6 +163,9 @@ class Dispatcher {
 		const { config } = commonStore;
 		const traceId = event.getTraceid();
 		const ctx: string[] = [ event.getContextid() ];
+		const electron = UtilCommon.getElectron();
+		const currentWindow = electron.currentWindow();
+		const { windowId } = currentWindow;
 		
 		if (traceId) {
 			ctx.push(traceId);
@@ -187,7 +201,7 @@ class Dispatcher {
 		for (const message of messages) {
 			const win = $(window);
 			const type = this.eventType(message.getValueCase());
-			const fn = 'get' + UtilCommon.ucFirst(type);
+			const fn = `get${UtilCommon.ucFirst(type)}`;
 			const data = message[fn] ? message[fn]() : {};
 			const needLog = this.checkLog(type) && !skipDebug;
 
@@ -199,13 +213,34 @@ class Dispatcher {
 				};
 
 				case 'accountUpdate': {
-					authStore.accountSet({ status: Mapper.From.AccountStatus(data.getStatus()) });
+					authStore.accountSetStatus(Mapper.From.AccountStatus(data.getStatus()));
 					break;	
 				};
 
 				case 'accountConfigUpdate': {
 					commonStore.configSet(Mapper.From.AccountConfig(data.getConfig()), true);
 					Renderer.send('setConfig', UtilCommon.objectCopy(commonStore.config));
+					break;
+				};
+
+				case 'accountLinkChallenge': {
+					if (windowId !== 1) {
+						break;
+					};
+
+					const info = data.getClientinfo();
+					const challenge = data.getChallenge();
+					const win = window.open(UtilCommon.fixAsarPath('./challenge/index.html'), '', 'width=424,height=232,menubar=no,resizable=no,scrollbars=no,location=no,toolbar=no,frame=no');
+
+					win.addEventListener('load', () => win.postMessage({ 
+						challenge,
+						theme: commonStore.getThemeClass(),
+						lang: commonStore.interfaceLang,
+					}, '*'), false);
+
+					window.setTimeout(() => {
+						try { win.close(); } catch (e) { /**/ };
+					}, 5000);
 					break;
 				};
 
@@ -240,7 +275,16 @@ class Dispatcher {
 				};
 
 				case 'fileSpaceUsage': {
-					commonStore.spaceStorageSet({ bytesUsed: data.getBytesusage() });
+					const spaceId = data.getSpaceid();
+					const { spaces } = commonStore.spaceStorage;
+					const space = spaces.find(it => it.spaceId == spaceId);
+					const bytesUsage = data.getBytesusage();
+
+					if (space) {
+						set(space, { bytesUsage });
+					} else {
+						spaces.push({ spaceId, bytesUsage });
+					};
 					break;
 				};
 
@@ -250,7 +294,8 @@ class Dispatcher {
 				};
 
 				case 'fileLimitReached': {
-					const { bytesUsed, bytesLimit, localUsage } = commonStore.spaceStorage;
+					const { bytesLimit, localUsage, spaces } = commonStore.spaceStorage;
+					const bytesUsed = spaces.reduce((res, current) => res += current.bytesUsage, 0);
 					const percentageUsed = Math.floor(UtilCommon.getPercent(bytesUsed, bytesLimit));
 
 					if (percentageUsed >= 99) {
@@ -314,7 +359,7 @@ class Dispatcher {
 						break;
 					};
 
-					blockStore.update(rootId, id, { fields: data.hasFields() ? Decode.decodeStruct(data.getFields()) : {} });
+					blockStore.update(rootId, id, { fields: data.hasFields() ? Decode.struct(data.getFields()) : {} });
 					break;
 				};
 
@@ -350,7 +395,7 @@ class Dispatcher {
 					};
 
 					if (data.hasFields()) {
-						block.content.fields = Decode.decodeStruct(data.getFields());
+						block.content.fields = Decode.struct(data.getFields());
 					};
 
 					blockStore.updateContent(rootId, id, block.content);
@@ -461,20 +506,8 @@ class Dispatcher {
 						break;
 					};
 
-					if (data.hasName()) {
-						block.content.name = data.getName().getValue();
-					};
-
-					if (data.hasHash()) {
-						block.content.hash = data.getHash().getValue();
-					};
-
-					if (data.hasMime()) {
-						block.content.mime = data.getMime().getValue();
-					};
-
-					if (data.hasSize()) {
-						block.content.size = data.getSize().getValue();
+					if (data.hasTargetobjectid()) {
+						block.content.targetObjectId = data.getTargetobjectid().getValue();
 					};
 
 					if (data.hasType()) {
@@ -846,7 +879,7 @@ class Dispatcher {
 					id = data.getId();
 					subIds = data.getSubidsList() || [];
 					block = blockStore.getLeaf(rootId, id);
-					details = Decode.decodeStruct(data.getDetails());
+					details = Decode.struct(data.getDetails());
 
 					this.detailsUpdate(details, rootId, id, subIds, true);
 					break;
@@ -859,7 +892,7 @@ class Dispatcher {
 
 					details = {};
 					for (const item of (data.getDetailsList() || [])) {
-						details[item.getKey()] = Decode.decodeValue(item.getValue());
+						details[item.getKey()] = Decode.value(item.getValue());
 					};
 
 					this.detailsUpdate(details, rootId, id, subIds, false);
@@ -930,6 +963,39 @@ class Dispatcher {
 					break;
 				};
 
+				case 'notificationSend': {
+					const item = new M.Notification(Mapper.From.Notification(data.getNotification()));
+
+					notificationStore.add(item);
+
+					if ((windowId == 1) && !electron.isFocused()) {
+						new window.Notification(UtilCommon.stripTags(item.title), { body: UtilCommon.stripTags(item.text) }).onclick = () => electron.focus();
+					};
+					break;
+				};
+
+				case 'notificationUpdate': {
+					notificationStore.update(Mapper.From.Notification(data.getNotification()));
+					break;
+				};
+
+				case 'payloadBroadcast': {
+					if (electron.currentWindow().windowId !== 1) {
+						break;
+					};
+
+					const payload = JSON.parse(data.getPayload());
+
+					switch (payload.type) {
+						case 'openObject': {
+							UtilObject.openAuto(payload.object);
+							electron.focus();
+							break;
+						};
+					};
+					break;
+				};
+
 				case 'processNew':
 				case 'processUpdate':
 				case 'processDone': {
@@ -963,64 +1029,6 @@ class Dispatcher {
 						case I.ProgressState.Done:
 						case I.ProgressState.Canceled: {
 							commonStore.progressClear();
-
-							let title = '';
-							let text = '';
-							let textConfirm = '';
-							const showPopup = [ I.ProgressType.Import, I.ProgressType.Export ].includes(type) && [ I.ProgressState.Done, I.ProgressState.Error ].includes(state);
-
-							switch (state) {
-								case I.ProgressState.Error: {
-									textConfirm = translate('dispatcherImportTryAgain');
-
-									switch (type) {
-										case I.ProgressType.Import: { 
-											title = translate('dispatcherImportErrorTitle');
-											text = translate('dispatcherImportErrorText'); 
-											break; 
-										};
-
-										case I.ProgressType.Export: { 
-											title = translate('dispatcherExportErrorTitle');
-											text = translate('dispatcherExportErrorText');
-											break; 
-										};
-									};
-									break;
-								};
-
-								case I.ProgressState.Done: {
-									textConfirm = translate('dispatcherImportConfirm');
-
-									switch (type) {
-										case I.ProgressType.Import: { 
-											title = translate('dispatcherImportSuccessTitle');
-											text = translate('dispatcherImportSuccessText'); 
-											break; 
-										};
-
-										case I.ProgressType.Export: { 
-											title = translate('dispatcherExportSuccessTitle');
-											text = translate('dispatcherExportSuccessText');
-											break; 
-										};
-									};
-									break;
-								};
-							};
-
-							if (showPopup) {
-								window.setTimeout(() => { 
-									popupStore.open('confirm', { 
-										data: { 
-											title, 
-											text,
-											textConfirm,
-											canCancel: false,
-										} 
-									}); 
-								}, Constant.delay.popup);
-							};
 							break;
 						};
 					};
@@ -1041,11 +1049,26 @@ class Dispatcher {
 	};
 
 	getUniqueSubIds (subIds: string[]) {
-		return UtilCommon.arrayUnique((subIds || []).map(it => it.split('/')[0]))
+		return UtilCommon.arrayUnique((subIds || []).map(it => it.split('/')[0]));
 	};
 
 	detailsUpdate (details: any, rootId: string, id: string, subIds: string[], clear: boolean) {
 		this.getUniqueSubIds(subIds).forEach(subId => detailStore.update(subId, { id, details }, clear));
+
+		if (details.spaceAccountStatus == I.SpaceStatus.Deleted) {
+			if (id == blockStore.spaceview) {
+				UtilRouter.switchSpace(authStore.accountSpaceId, '');
+			};
+
+			const spaceview = UtilObject.getSpaceview(id);
+			if (spaceview && !spaceview._empty_) {
+				Storage.deleteSpace(spaceview.targetSpaceId);
+			};
+		};
+
+		if (!rootId) {
+			return;
+		};
 
 		detailStore.update(rootId, { id, details }, clear);
 
@@ -1057,6 +1080,7 @@ class Dispatcher {
 
 			if (undefined !== details.setOf) {
 				blockStore.updateWidgetData(rootId);
+				$(window).trigger(`updateDataviewData.dataview`);
 			};
 
 			blockStore.checkTypeSelect(rootId);
@@ -1154,13 +1178,13 @@ class Dispatcher {
 		const { config } = commonStore;
 		const debug = config.debug.mw;
 		const ct = UtilCommon.toCamelCase(type);
+		const t0 = performance.now();
 
 		if (!this.service[ct]) {
 			console.error('[Dispatcher.request] Service not found: ', type);
 			return;
 		};
 
-		const t0 = performance.now();
 		let t1 = 0;
 		let t2 = 0;
 		let d = null;
@@ -1264,4 +1288,4 @@ class Dispatcher {
 
 };
 
- export const dispatcher = new Dispatcher();
+export const dispatcher = new Dispatcher();

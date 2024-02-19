@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { getRange, setRange } from 'selection-ranges';
-import { I, Mark } from 'Lib';
+import { I, Mark, UtilCommon } from 'Lib';
 
 interface Props {
 	id?: string;
@@ -9,6 +9,7 @@ interface Props {
 	classNamePlaceholder?: string;
 	placeholder?: string;
 	readonly?: boolean;
+	spellcheck?: boolean;
 	onKeyDown?: (e: any) => void;
 	onKeyUp?: (e: any) => void;
 	onFocus?: (e: any) => void;
@@ -43,7 +44,7 @@ class Editable extends React.Component<Props> {
 
 	render () {
 		const { 
-			id, classNameWrap, classNameEditor, classNamePlaceholder, readonly, placeholder, onFocus, onBlur, onSelect, onPaste, 
+			id, classNameWrap, classNameEditor, classNamePlaceholder, readonly, placeholder, spellcheck, onFocus, onBlur, onSelect, onPaste, 
 			onMouseDown, onMouseUp, onDragStart
 		} = this.props;
 		const cnw = [ 'editableWrap' ];
@@ -68,10 +69,11 @@ class Editable extends React.Component<Props> {
 
 			editor = (
 				<div 
-					id="value" 
+					id={id} 
 					className={cne.join(' ')} 
 					contentEditable={true}
 					suppressContentEditableWarning={true}
+					spellCheck={false}
 					onMouseUp={onSelect} 
 				/>
 			);
@@ -82,6 +84,7 @@ class Editable extends React.Component<Props> {
 					className={cne.join(' ')}
 					contentEditable={true}
 					suppressContentEditableWarning={true}
+					spellCheck={spellcheck}
 					onKeyDown={this.onKeyDown}
 					onKeyUp={this.onKeyUp}
 					onFocus={onFocus}
@@ -123,10 +126,20 @@ class Editable extends React.Component<Props> {
 	};
 
 	init () {
-		const node = $(this.node);
+		const pl = this.placeholder ? this.placeholder.length : 0;
+		const el = this.editable ? this.editable.length : 0;
 
-		this.placeholder = node.find('#placeholder');
-		this.editable = node.find('.editable');
+		if (pl && el) {
+			return;
+		};
+
+		const node = $(this.node);
+		if (!pl) {
+			this.placeholder = node.find('#placeholder');
+		};
+		if (!el) {
+			this.editable = node.find('.editable');
+		};
 	};
 
 	placeholderCheck () {
@@ -146,7 +159,7 @@ class Editable extends React.Component<Props> {
 	};
 
 	setValue (html: string) {
-		this.editable.get(0).innerHTML = html;
+		this.editable.get(0).innerHTML = UtilCommon.sanitize(html);
 	};
 
 	getTextValue (): string {
@@ -166,10 +179,8 @@ class Editable extends React.Component<Props> {
 	setRange (range: I.TextRange) {
 		const el = this.editable.get(0);
 
-		window.setTimeout(() => {
-			el.focus({ preventScroll: true });
-			setRange(el, { start: range.from, end: range.to });
-		}, 15);
+		el.focus({ preventScroll: true });
+		setRange(el, { start: range.from, end: range.to });
 	};
 
 	onInput (e: any) {

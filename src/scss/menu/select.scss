@@ -20,21 +20,62 @@
 
 	.menu.menuSelect.withFilter {
 		.content { padding: 8px 0px 0px 0px; }
-		.items { height: calc(100% - 34px); }
+		.items { height: calc(100% - 38px); }
 	}
-	
+
 	.menu.menuSelect.skip { width: 320px; }
 	.menu.menuSelect.skip {
 		.name { margin: 0px; width: calc(100% - 24px); @include text-overflow-nw; }
 	}
 
 	.menu.menuSelect.button {
-		.item { white-space: nowrap; display: inline-block; margin-right: 16px; color: $colorMediumGrey; font-weight: 500; }
-		.item:hover { color: $colorTextPrimary; }
+		.item { white-space: nowrap; display: inline-block; margin-right: 16px; color: var(--color-control-active); font-weight: 500; }
+		.item:hover { color: var(--color-text-primary); }
 		.item:last-child { margin-right: 0px; }
 	}
 
 	.menu.menuSelect.center {
 		.item { text-align: center; }
+	}
+
+	.menu.menuSelect.withFullDescripion {
+		.content { overflow: auto; padding: 8px 0px; }
+
+		.item.withDescription { height: auto; }
+		.item.withDescription {
+			.iconObject { background-color: var(--color-shape-highlight-medium); }
+			.descr { overflow: visible; white-space: normal; height: auto; }
+		}
+	}
+
+	.menu.menuSelect.noScroll {
+		.content { overflow: hidden; max-height: unset; }
+	}
+
+	.menu.menuSelect.noVirtualisation {
+		.items { padding: 8px 0px; }
+	}
+
+	.menu.menuSelect.spaceSelect { width: 280px; }
+	.menu.menuSelect.spaceSelect {
+		.content { padding: 8px 0px; }
+		.item { padding: 4px 16px; }
+		.item {
+			.icon.add {
+				border-radius: 8px; border: 1px solid var(--color-shape-secondary); background-color: var(--color-shape-highlight-light);
+				background-image: url('~img/icon/popup/usecase/plus.svg'); width: 48px; height: 48px; background-size: 20px;
+			}
+			.iconObject, .icon { margin: 0px; }
+			.iconObject.isSpaceView { border-radius: 8px !important; }
+			.clickable { align-items: center; gap: 0px 12px; }
+		}
+	}
+
+	/* Links, Backlinks */
+	.menu.menuSelect.featuredLinks {
+		.item {
+			.info { width: 100%; }
+			.iconObject { margin: 0px; background-color: var(--color-shape-highlight-medium); }
+		}
 	}
 }

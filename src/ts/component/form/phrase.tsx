@@ -11,8 +11,10 @@ interface Props {
 	readonly?: boolean;
 	isHidden?: boolean;
 	checkPin?: boolean;
+	onKeyDown?: (e: React.KeyboardEvent) => void;
 	onChange?: (phrase: string) => void;
 	onToggle?: (isHidden: boolean) => void;
+	onCopy?: () => void;
 };
 
 interface State {
@@ -31,9 +33,6 @@ const COLORS = [
 	'lime',
 ];
 
-const LIMIT_WORDS = 12;
-const LIMIT_LETTER = 8;
-
 class Phrase extends React.Component<Props, State> {
 
 	public static defaultProps: Props = {
@@ -49,7 +48,6 @@ class Phrase extends React.Component<Props, State> {
 	node = null;
 	placeholder = null;
 	entry = null;
-	timeout = 0;
 	range = null;
 
 	constructor (props: Props) {
@@ -66,7 +64,7 @@ class Phrase extends React.Component<Props, State> {
 	};
 
 	render () {
-		const { readonly } = this.props;
+		const { readonly, onCopy } = this.props;
 		const { isHidden, hasError, phrase } = this.state;
 		const cn = [ 'phraseWrapper' ];
 
@@ -115,6 +113,7 @@ class Phrase extends React.Component<Props, State> {
 
 				<div id="placeholder" className="placeholder">{translate('phrasePlaceholder')}</div>
 				<Icon className={isHidden ? 'see' : 'hide'} onClick={this.onToggle} />
+				<Icon className="copy" onClick={onCopy} />
 			</div>
 		);
 	};
@@ -135,10 +134,6 @@ class Phrase extends React.Component<Props, State> {
 		this.placeholderCheck();
 	};
 
-	componentWillUnmount () {
-		window.clearTimeout(this.timeout);
-	};
-
 	init () {
 		const node = $(this.node);
 
@@ -151,9 +146,9 @@ class Phrase extends React.Component<Props, State> {
 	};
 
 	onKeyDown (e: React.KeyboardEvent) {
-		keyboard.shortcut('space, enter', e, () => {
-			e.preventDefault();
-		});
+		const { onKeyDown } = this.props;
+
+		keyboard.shortcut('space, enter', e, () => e.preventDefault());
 
 		keyboard.shortcut('backspace', e, () => {
 			e.stopPropagation();
@@ -172,24 +167,19 @@ class Phrase extends React.Component<Props, State> {
 		});
 
 		this.placeholderCheck();
+
+		if (onKeyDown) {
+			onKeyDown(e);
+		};
 	};
 
 	onKeyUp (e: React.KeyboardEvent) {
-		window.clearTimeout(this.timeout);
-
-		let ret = false;
 		keyboard.shortcut('space, enter', e, () => {
 			e.preventDefault();
 			this.updateValue();
-
-			ret = true;
 		});
 
 		this.placeholderCheck();
-
-		if (!ret) {
-			this.timeout = window.setTimeout(() => this.updateValue(), Constant.delay.keyboard * 2);
-		};
 	};
 
 	updateValue () {
@@ -250,7 +240,7 @@ class Phrase extends React.Component<Props, State> {
 	};
 
 	checkValue (v: string[]) {
-		return v.map(it => it.substring(0, LIMIT_LETTER)).filter(it => it).slice(0, LIMIT_WORDS);
+		return v.map(it => it.substring(0, Constant.limit.phrase.letter)).filter(it => it).slice(0, Constant.limit.phrase.word);
 	};
 
 	setError (v: boolean) {

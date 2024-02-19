@@ -78,11 +78,9 @@ class DragLayer extends React.Component<object, State> {
 	};
 
 	hide () {
-		if (!this._isMounted) {
-			return;
+		if (this._isMounted) {
+			this.setState({ rootId: '', type: I.DropType.None, ids: [], width: 0 });
 		};
-
-		this.setState({ rootId: '', type: I.DropType.None, ids: [], width: 0 });
 	};
 
 	renderContent () {
@@ -90,18 +88,18 @@ class DragLayer extends React.Component<object, State> {
 		const node = $(this.node);
 		const inner = node.find('#inner').html('');
 		const container = UtilCommon.getPageContainer(keyboard.isPopup());
-
 		const wrap = $('<div></div>');
-		let items: any[] = [];
 
 		switch (type) {
 			case I.DropType.Block: {
 				wrap.addClass('blocks');
 
-				items = ids.map(id => blockStore.getLeaf(rootId, id)).filter(it => it).map(it => new M.Block(UtilCommon.objectCopy(it)));
+				const items = ids.map(id => blockStore.getLeaf(rootId, id)).filter(it => it).map(it => new M.Block(UtilCommon.objectCopy(it)));
 
 				items.forEach(block => {
 					const clone = container.find(`#block-${block.id}`).clone();
+
+					wrap.append(clone);
 
 					if (block.isDataview()) {
 						const controls = clone.find('.dataviewControls');
@@ -112,7 +110,10 @@ class DragLayer extends React.Component<object, State> {
 						controls.find('#sideRight').remove();
 					};
 
-					wrap.append(clone);
+					if (block.isEmbed()) {
+						clone.find('#value').remove();
+						clone.find('.preview').css({ display: 'block' });
+					};
 				});
 				break;
 			};
@@ -122,7 +123,7 @@ class DragLayer extends React.Component<object, State> {
 
 				wrap.addClass('menus').append(add);
 
-				items = ids.map(relationKey => dbStore.getRelationByKey(relationKey)).filter(it => it);
+				const items = ids.map(relationKey => dbStore.getRelationByKey(relationKey)).filter(it => it);
 
 				items.forEach(item => {
 					const el = $(`#menuBlockRelationView #item-${item.id}`);
@@ -148,11 +149,10 @@ class DragLayer extends React.Component<object, State> {
 
 				ids.forEach((id: string, idx: number) => {
 					const el = container.find(`#record-${id}`);
-					const margin = idx * 10;
 					const clone = el.clone().addClass('record');
 
 					view.append(clone);
-					clone.css({ marginLeft: margin, marginTop: margin, zIndex: (ids.length - idx), width: el.width() });
+					clone.css({ width: el.width() });
 				});
 				break;
 			};

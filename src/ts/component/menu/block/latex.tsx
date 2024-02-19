@@ -53,6 +53,7 @@ const MenuBlockLatex = observer(class MenuBlockLatex extends React.Component<I.M
 					displayMode: true,
 					throwOnError: false,
 					output: 'html',
+					fleqn: false,
 					trust: (context: any) => [ '\\url', '\\href', '\\includegraphics' ].includes(context.command),
 				});
 
@@ -66,7 +67,7 @@ const MenuBlockLatex = observer(class MenuBlockLatex extends React.Component<I.M
 					>
 						{isTemplate ? (
 							<div className="inner">
-								<div className="math" dangerouslySetInnerHTML={{ __html: math }} />
+								<div className="math" dangerouslySetInnerHTML={{ __html: UtilCommon.sanitize(math) }} />
 							</div>
 						) : (
 							<div className="name">{name}</div>
@@ -177,7 +178,7 @@ const MenuBlockLatex = observer(class MenuBlockLatex extends React.Component<I.M
 
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 

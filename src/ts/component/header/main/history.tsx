@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { observer } from 'mobx-react';
 import { Icon } from 'Component';
-import { C, UtilCommon, UtilObject, I, translate, analytics } from 'Lib';
+import { C, UtilDate, UtilObject, I, translate, analytics } from 'Lib';
 import { detailStore } from 'Store';
 
 interface State {
@@ -23,6 +23,7 @@ const HeaderMainHistory = observer(class HeaderMainHistory extends React.Compone
 
 	render () {
 		const { version } = this.state;
+		const canWrite = UtilObject.canParticipantWrite();
 
 		return (
 			<React.Fragment>
@@ -34,12 +35,12 @@ const HeaderMainHistory = observer(class HeaderMainHistory extends React.Compone
 
 				<div className="side center">
 					<div className="txt">
-						{version ? UtilCommon.date('d F Y H:i:s', version.time) : ''}
+						{version ? UtilDate.date('d F Y H:i:s', version.time) : ''}
 					</div>
 				</div>
 
 				<div className="side right" onClick={this.onRestore}>
-					<div className="item orange">{translate('headerHistoryRestore')}</div>
+					{canWrite ? <div className="item orange">{translate('headerHistoryRestore')}</div> : ''}
 				</div>
 			</React.Fragment>
 		);

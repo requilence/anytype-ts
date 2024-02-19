@@ -58,7 +58,7 @@ const MenuBlockLink = observer(class MenuBlockLink extends React.Component<I.Men
 				return null;
 			};
 
-			const type = dbStore.getType(item.type);
+			const type = dbStore.getTypeById(item.type);
 			const cn = [];
 
 			let object = { ...item, id: item.itemId };
@@ -92,8 +92,8 @@ const MenuBlockLink = observer(class MenuBlockLink extends React.Component<I.Men
 						object={object}
 						icon={item.icon}
 						name={<ObjectName object={item} />}
-						onMouseEnter={(e: any) => { this.onOver(e, item); }} 
-						onClick={(e: any) => { this.onClick(e, item); }}
+						onMouseEnter={e => this.onOver(e, item)} 
+						onClick={e => this.onClick(e, item)}
 						withDescription={item.isBig}
 						description={type ? type.name : undefined}
 						style={param.style}
@@ -206,7 +206,7 @@ const MenuBlockLink = observer(class MenuBlockLink extends React.Component<I.Men
 
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 	
@@ -242,27 +242,24 @@ const MenuBlockLink = observer(class MenuBlockLink extends React.Component<I.Men
 			return [];
 		};
 
-		const regProtocol = /[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)?/gi;
-		const buttons: any[] = [
-			{ id: 'add', name: UtilCommon.sprintf(translate('commonCreateObject'), filter), icon: 'plus' }
-		];
-		const items = [].concat(this.items).map(it => ({ ...it, isBig: true }));
-
-		if (items.length) {
-			buttons.push({ isDiv: true });
-		};
-
-		if (UtilCommon.matchUrl(filter) || filter.match(new RegExp(regProtocol))) {
-			buttons.unshift({ id: 'link', name: translate('menuBlockLinkSectionsLinkToWebsite'), icon: 'link' });
-		};
-
+		const isLocal = filter.match(/^file:/) || UtilCommon.matchLocalPath(filter);
+		const isUrl = UtilCommon.matchUrl(filter) || UtilCommon.matchDomain(filter);
+		const items = [].concat(this.items);
 		const sections: any[] = [];
 
-		sections.push({ id: I.MarkType.Link, name: '', children: buttons });
+		if (isLocal || isUrl) {
+			items.unshift({ id: 'link', name: translate('menuBlockLinkSectionsLinkToWebsite'), icon: 'link', isLocal });
+		};
 
 		if (items.length) {
-			sections.push({ id: I.MarkType.Object, name: translate('commonObjects'), children: items });
+			sections.push({ id: I.MarkType.Object, children: items.map(it => ({ ...it, isBig: true })) });
 		};
+
+		sections.push({ 
+			id: I.MarkType.Link, name: '', children: [
+				{ id: 'add', name: UtilCommon.sprintf(translate('commonCreateObject'), filter), icon: 'plus' },
+			] 
+		});
 
 		return UtilMenu.sectionsMap(sections);
 	};
@@ -272,6 +269,9 @@ const MenuBlockLink = observer(class MenuBlockLink extends React.Component<I.Men
 		
 		let items: any[] = [];
 		for (const section of sections) {
+			if (items.length && section.children.length) {
+				items.push({ isDiv: true });
+			};
 			if (withSections && section.name) {
 				items.push({ id: section.id, name: section.name, isSection: true });
 			};
@@ -291,13 +291,13 @@ const MenuBlockLink = observer(class MenuBlockLink extends React.Component<I.Men
 		const { param } = this.props;
 		const { data } = param;
 		const { skipIds, filter } = data;
-		const skipTypes = UtilObject.getSystemTypes().filter(it => it != Constant.typeId.date);
 
 		const filters: any[] = [
-			{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: skipTypes },
+			{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemLayouts() },
 		];
 		const sorts = [
 			{ relationKey: 'lastModifiedDate', type: I.SortType.Desc },
+			{ relationKey: 'type', type: I.SortType.Asc },
 		];
 
 		if (skipIds && skipIds.length) {
@@ -358,12 +358,17 @@ const MenuBlockLink = observer(class MenuBlockLink extends React.Component<I.Men
 		const { filter, onChange } = data;
 
 		if (item.itemId == 'link') {
-			onChange(I.MarkType.Link, filter);
+			let url = filter;
+			if (item.isLocal && url && !url.match(/^file:/)) {
+				url = `file://${url}`;
+			};
+
+			onChange(I.MarkType.Link, url);
 		} else
 		if (item.itemId == 'add') {
-			const type = dbStore.getType(commonStore.type);
+			const type = dbStore.getTypeById(commonStore.type);
 
-			UtilObject.create('', '', { name: filter }, I.BlockPosition.Bottom, '', {}, [ I.ObjectFlag.SelectType ], (message: any) => {
+			UtilObject.create('', '', { name: filter }, I.BlockPosition.Bottom, '', {}, [ I.ObjectFlag.SelectType, I.ObjectFlag.SelectTemplate ], (message: any) => {
 				if (message.error.code) {
 					return;
 				};

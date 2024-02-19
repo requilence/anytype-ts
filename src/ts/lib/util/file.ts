@@ -1,47 +1,43 @@
 import loadImage from 'blueimp-load-image';
-import { UtilCommon } from 'Lib';
+import { UtilCommon, Relation } from 'Lib';
+import { commonStore } from 'Store';
 import Constant from 'json/constant.json';
+
+const SIZE_UNIT = 1024;
+const UNITS = {
+	1: 'B',
+	2: 'KB',
+	3: 'MB',
+	4: 'GB',
+	5: 'TB',
+};
 
 class UtilFile {
 
-	fromPath (path: string) {
-		const { buffer, type } = window.Electron.fileParam(path);
-		if (!type) {
-			return null;
-		};
-
-		const fn = path.split('/');
-		const file = new File([ new Blob([ buffer ]) ], fn[fn.length - 1], { type: type.mime });
-		return file;
-	};
-
-	size (v: number) {
+	size (v: number): string {
 		v = Number(v) || 0;
 
-		const trimmer = (n, afterComma) => {
-			return Number.isInteger(n) ? 0 : afterComma;
-		};
+		let ret = 0;
+		let unit = '';
 
-		const unit = 1000;
-		const g = v / (unit * unit * unit);
-		const m = v / (unit * unit);
-		const k = v / unit;
-		if (g >= 1) {
-			v = UtilCommon.sprintf(`%0.${trimmer(g, 2)}fGB`, UtilCommon.round(g, trimmer(g, 2)));
-		} else if (m > 1) {
-			v = UtilCommon.sprintf(`%0.${trimmer(m, 1)}fMB`, UtilCommon.round(m, trimmer(m, 1)));
-		} else if (k > 1) {
-			v = UtilCommon.sprintf(`%0.${trimmer(k, 1)}fKB`, UtilCommon.round(k, trimmer(k, 1)));
-		} else {
-			v = UtilCommon.sprintf('%dB', UtilCommon.round(v, 0));
+		for (let i = UtilCommon.objectLength(UNITS); i >= 1; --i) {
+			const n = v / Math.pow(SIZE_UNIT, i - 1);
+			if ((n >= 0.9) || (i == 1)) {
+				ret = n;
+				unit = UNITS[i];
+				break;
+			};
 		};
-		return v;
+		return UtilCommon.formatNumber(Number(UtilCommon.sprintf(`%0.2f`, ret))) + unit;
 	};
 
-	icon (obj: any): string {
-		const n = obj.name.split('.');
-		const mime = String(obj.mime || obj.mimeType || obj.fileMimeType || '').toLowerCase();
-		const e = String(obj.fileExt || n[n.length - 1] || '').toLowerCase();
+	icon (object: any): string {
+		object = object || {};
+
+		const name = Relation.getStringValue(object.name);
+		const n = name.split('.');
+		const mime = String(object.mime || object.mimeType || object.fileMimeType || '').toLowerCase();
+		const e = String(object.fileExt || n[n.length - 1] || '').toLowerCase();
 
 		let t: string[] = [];
 		let icon = 'other';
@@ -98,14 +94,29 @@ class UtilFile {
 			icon = 'presentation';
 		};
 
-		for (const k in Constant.extension) {
-			if (Constant.extension[k].indexOf(e) >= 0) {
+		for (const k in Constant.fileExtension) {
+			const el = Constant.fileExtension[k];
+			if (!UtilCommon.hasProperty(el, 'length')) {
+				continue;
+			};
+
+			if (el.includes(e)) {
 				icon = k;
 				break;
 			};
 		};
 
 		return icon;
+	};
+
+	iconPath (object: any) {
+		const tp = commonStore.getThemePath();
+		return `img/${tp}icon/file/${this.icon(object)}.svg`;
+	};
+
+	iconImage (object: any): string {
+		const tp = commonStore.getThemePath();
+		return require(`img/${tp}icon/file/${this.icon(object)}.svg`).default;
 	};
 
 	loadPreviewCanvas (file: any, param: any, success?: (canvas: any) => void) {

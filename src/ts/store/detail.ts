@@ -27,6 +27,11 @@ class DetailStore {
 
 	/** Idempotent. adds details to the detail store. */
     public set (rootId: string, items: Item[]) {
+		if (!rootId) {
+			console.log('[detailStore].set: rootId is not defined');
+			return;
+		};
+
 		const map = observable.map(new Map());
 
 		for (const item of items) {
@@ -52,6 +57,16 @@ class DetailStore {
 
 	/** Idempotent. updates details in the detail store. if clear is set, map wil delete details by item id. */
     public update (rootId: string, item: Item, clear: boolean): void {
+		if (!rootId) {
+			console.log('[detailStore].update: rootId is not defined');
+			return;
+		};
+
+		if (!item.details) {
+			console.log('[detailStore].update: details are not defined');
+			return;
+		};
+
 		let map = this.map.get(rootId);
 		let createMap = false;
 		let createList = false;
@@ -92,9 +107,12 @@ class DetailStore {
 			map.set(item.id, list);
 		};
 
-		// Update relationKeyMap in dbStore to keep consistency
-		if (item.details && (item.details.type == Constant.typeId.relation) && item.details.relationKey && item.details.id) {
-			dbStore.relationKeyMap[item.details.relationKey] = item.details.id;
+		// Update relationKeyMap and typeKeyMap in dbStore to keep consistency
+		if (item.details.layout == I.ObjectLayout.Relation) {
+			dbStore.relationKeyMapSet(item.details.spaceId, item.details.relationKey, item.details.id);
+		};
+		if (item.details.layout == I.ObjectLayout.Type) {
+			dbStore.typeKeyMapSet(item.details.spaceId, item.details.uniqueKey, item.details.id);
 		};
 
 		if (createMap) {
@@ -121,8 +139,10 @@ class DetailStore {
 		};
 
 		if (keys && keys.length) {
-			const list = this.getDetailList(rootId, id).filter(it => !keys.includes(it.relationKey));
-			map.set(id, list);
+			const item = { id, details: {} };
+			keys.forEach(key => item.details[key] = null);
+
+			this.update(rootId, item, false);
 		} else {
 			map.set(id, []);
 		};
@@ -130,21 +150,21 @@ class DetailStore {
 
 	/** gets the object. if no keys are provided, all properties are returned. if force keys is set, Constant.defaultRelationKeys are included */
     public get (rootId: string, id: string, withKeys?: string[], forceKeys?: boolean): any {
-		let list = this.getDetailList(rootId, id);		
+		let list = this.getDetailList(rootId, id);
 		if (!list.length) {
 			return { id, _empty_: true };
 		};
 		
+		const keys = new Set(withKeys ? [ ...withKeys, ...(!forceKeys ? Constant.defaultRelationKeys : []) ] : []);
+		const object = { id };
+
 		if (withKeys) {
-			let keys = [ 'id', ...withKeys ];
-			if (!forceKeys) {
-				keys = keys.concat(Constant.defaultRelationKeys);
-			};
-			list = list.filter(it => keys.includes(it.relationKey));
+			list = list.filter(it => keys.has(it.relationKey));
 		};
 
-		const object = { id };
-		list.forEach(it => object[it.relationKey] = it.value);
+		for (let i = 0; i < list.length; i++) {
+			object[list[i].relationKey] = list[i].value;
+		};
 
 		return this.mapper(object);
 	};
@@ -166,48 +186,52 @@ class DetailStore {
 			object.name = translate('commonDeletedObject');
 		};
 
-		switch (object.type) {
-			case Constant.typeId.type:
-			case Constant.storeTypeId.type: {
-				object = this.mapObjectType(object);
+		switch (object.layout) {
+			case I.ObjectLayout.Type: {
+				object = this.mapType(object);
 				break;
 			};
 
-			case Constant.typeId.relation:
-			case Constant.storeTypeId.relation: {
+			case I.ObjectLayout.Relation: {
 				object = this.mapRelation(object);
 				break;
 			};
 
-			case Constant.typeId.option: {
+			case I.ObjectLayout.Option: {
 				object = this.mapOption(object);
 				break;
 			};
 
-			case Constant.typeId.set: {
+			case I.ObjectLayout.Date:
+			case I.ObjectLayout.Set: {
 				object = this.mapSet(object);
 				break;
 			};
 
-			case Constant.typeId.space: {
+			case I.ObjectLayout.SpaceView: {
 				object = this.mapSpace(object);
 				break;
 			};
 
-			case Constant.typeId.template: {
-				object = this.mapTemplate(object);
+			case I.ObjectLayout.Participant: {
+				object = this.mapParticipant(object);
 				break;
 			};
+		};
+
+		if (UtilObject.isFileLayout(object.layout)) {
+			object = this.mapFile(object);
 		};
 
 		return object;
 	};
 
 	private mapCommon (object: any) {
-		object.name = Relation.getStringValue(object.name) || UtilObject.defaultName('Page');
+		object.name = Relation.getStringValue(object.name) || translate('defaultNamePage');
 		object.snippet = Relation.getStringValue(object.snippet).replace(/\n/g, ' ');
 		object.type = Relation.getStringValue(object.type);
 		object.layout = Number(object.layout) || I.ObjectLayout.Page;
+		object.origin = Number(object.origin) || I.ObjectOrigin.None;
 		object.iconImage = Relation.getStringValue(object.iconImage);
 		object.iconEmoji = Relation.getStringValue(object.iconEmoji);
 		object.layoutAlign = Number(object.layoutAlign) || I.BlockHAlign.Left;
@@ -223,11 +247,12 @@ class DetailStore {
 		return object;
 	};
 
-	private mapObjectType (object: any) {
+	private mapType (object: any) {
 		object.recommendedLayout = Number(object.recommendedLayout) || I.ObjectLayout.Page;
 		object.recommendedRelations = Relation.getArrayValue(object.recommendedRelations);
-		object.isInstalled = object.workspaceId != Constant.storeSpaceId;
+		object.isInstalled = object.spaceId != Constant.storeSpaceId;
 		object.sourceObject = Relation.getStringValue(object.sourceObject);
+		object.uniqueKey = Relation.getStringValue(object.uniqueKey);
 		object.defaultTemplateId = Relation.getStringValue(object.defaultTemplateId);
 
 		if (object.isDeleted) {
@@ -244,16 +269,17 @@ class DetailStore {
 		object.objectTypes = Relation.getArrayValue(object.relationFormatObjectTypes);
 		object.isReadonlyRelation = Boolean(object.isReadonly);
 		object.isReadonlyValue = Boolean(object.relationReadonlyValue);
-		object.isInstalled = object.workspaceId != Constant.storeSpaceId;
+		object.isInstalled = object.spaceId != Constant.storeSpaceId;
 		object.sourceObject = Relation.getStringValue(object.sourceObject);
 
 		if (object.isDeleted) {
 			object.name = translate('commonDeletedRelation');
 		};
 
-		delete(object.relationMaxCount);
 		delete(object.isReadonly);
+		delete(object.relationMaxCount);
 		delete(object.relationReadonlyValue);
+		delete(object.relationFormatObjectTypes);
 
 		return object;
 	};
@@ -273,16 +299,27 @@ class DetailStore {
 	};
 
 	private mapSpace (object: any) {
-		object.spaceType = Number(object.spaceAccessibility) || I.SpaceType.Personal;
-
-		delete(object.spaceAccessibility);
+		object.spaceAccessType = Number(object.spaceAccessType) || I.SpaceType.Private;
+		object.spaceAccountStatus = Number(object.spaceAccountStatus) || I.SpaceStatus.Unknown;
+		object.spaceLocalStatus = Number(object.spaceLocalStatus) || I.SpaceStatus.Unknown;
+		object.spaceId = Relation.getStringValue(object.spaceId);
+		object.spaceDashboardId = Relation.getStringValue(object.spaceDashboardId);
+		object.targetSpaceId = Relation.getStringValue(object.targetSpaceId);
 
 		return object;
 	};
 
-	private mapTemplate (object: any) {
-		object.targetObjectType = Relation.getStringValue(object.targetObjectType);
-		object.templateIsBundled = Boolean(object.templateIsBundled);
+	private mapFile (object) {
+		object.sizeInBytes = Number(object.sizeInBytes) || 0;
+		return object;
+	};
+
+	private mapParticipant (object) {
+		object.permissions = Number(object.participantPermissions) || I.ParticipantPermissions.Reader;
+		object.status = Number(object.participantStatus) || I.ParticipantStatus.Joining;
+
+		delete(object.participantPermissions);
+		delete(object.participantStatus);
 
 		return object;
 	};

@@ -3,8 +3,7 @@ import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { Icon, IconObject } from 'Component';
 import { I, C, Relation, analytics, keyboard, translate } from 'Lib';
-import { menuStore } from 'Store';
-import Constant from 'json/constant.json';
+import { menuStore, detailStore } from 'Store';
 
 const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 	
@@ -23,19 +22,19 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 		const { data } = param;
 		const { rootId, objectId } = data;
 		const items = this.getItems();
-		const types = Relation.getSetOfObjects(rootId, objectId, Constant.typeId.type);
+		const types = Relation.getSetOfObjects(rootId, objectId, I.ObjectLayout.Type);
 		
 		const Item = (item: any) => {
 			const canDelete = item.id != 'type';
 			return (
-				<form id={'item-' + item.itemId} className={[ 'item' ].join(' ')} onMouseEnter={(e: any) => { this.onOver(e, item); }}>
+				<form id={'item-' + item.itemId} className={[ 'item' ].join(' ')} onMouseEnter={e => this.onOver(e, item)}>
 					<IconObject size={40} object={item} forceLetter={true} />
-					<div className="txt" onClick={(e: any) => { this.onClick(e, item); }}>
+					<div className="txt" onClick={e => this.onClick(e, item)}>
 						<div className="name">{item.name}</div>
 						<div className="value">{item.value}</div>
 					</div>
 					<div className="buttons">
-						{canDelete ? <Icon className="delete" onClick={(e: any) => { this.onRemove(e, item); }} /> : ''}
+						{canDelete ? <Icon className="delete" onClick={e => this.onRemove(e, item)} /> : ''}
 					</div>
 				</form>
 			);
@@ -62,8 +61,8 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 							id="item-add" 
 							className="item add" 
 							onClick={this.onAdd} 
-							onMouseEnter={() => { this.props.setHover({ id: 'add' }); }} 
-							onMouseLeave={() => { this.props.setHover(); }}
+							onMouseEnter={() => this.props.setHover({ id: 'add' })} 
+							onMouseLeave={() => this.props.setHover()}
 						>
 							<Icon className="plus" />
 							<div className="name">{translate('menuDataviewSourceAddRelation')}</div>
@@ -88,7 +87,7 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 
 	rebind () {
 		this.unbind();
-		$(window).on('keydown.menu', (e: any) => { this.props.onKeyDown(e); });
+		$(window).on('keydown.menu', e => this.props.onKeyDown(e));
 		window.setTimeout(() => this.props.setActive(), 15);
 	};
 	
@@ -97,9 +96,7 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 	};
 
 	onAdd (e: any) {
-		const { getId, getSize, param } = this.props;
-		const { data } = param;
-		const { blockId } = data;
+		const { getId, getSize } = this.props;
 		const value = this.getValue();
 
 		menuStore.open('searchObject', { 
@@ -110,7 +107,7 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 			data: {
 				skipIds: value,
 				filters: [
-					{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.typeId.relation },
+					{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Relation },
 				],
 				sorts: [
 					{ relationKey: 'name', type: I.SortType.Asc }
@@ -127,7 +124,9 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 	};
 
 	onRemove (e: any, item: any) {
-		this.save(this.getValue().filter(it => it != item.id));
+		if (item) {
+			this.save(this.getValueIds().filter(it => it != item.id));
+		};
 	};
 
 	onOver (e: any, item: any) {
@@ -167,13 +166,16 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 		const { objectId, blockId } = data;
 
 		C.ObjectSetSource(objectId, value, () => {
-			$(window).trigger(`updateDataviewData.${blockId}`);
+			if (blockId) {
+				$(window).trigger(`updateDataviewData.${blockId}`);
+			};
+
 			if (callBack) {
 				callBack();
 			};
-		});
 
-		this.forceUpdate();
+			this.forceUpdate();
+		});
 	};
 
 	getValue () {
@@ -182,8 +184,12 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 		const { rootId, objectId } = data;
 
 		return [].
-			concat(Relation.getSetOfObjects(rootId, objectId, Constant.typeId.type)).
-			concat(Relation.getSetOfObjects(rootId, objectId, Constant.typeId.relation));
+			concat(Relation.getSetOfObjects(rootId, objectId, I.ObjectLayout.Type)).
+			concat(Relation.getSetOfObjects(rootId, objectId, I.ObjectLayout.Relation));
+	};
+
+	getValueIds () {
+		return this.getValue().map(it => it.id);
 	};
 
 	getItems () {
@@ -201,7 +207,7 @@ const MenuSource = observer(class MenuSource extends React.Component<I.Menu> {
 			});
 		} else {
 			value.forEach(it => {
-				if (it.type == Constant.typeId.type) {
+				if (it.layout == I.ObjectLayout.Type) {
 					items.push({
 						...it,
 						itemId: 'type',

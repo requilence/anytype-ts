@@ -1,11 +1,11 @@
 import * as React from 'react';
-import raf from 'raf';
+import $ from 'jquery';
+import { observer } from 'mobx-react';
 import { Icon, IconObject } from 'Component';
-import { commonStore, detailStore, blockStore, popupStore } from 'Store';
-import { I, UtilObject, keyboard, Storage, UtilCommon, Preview, translate } from 'Lib';
-import Constant from 'json/constant.json';
+import { commonStore, menuStore } from 'Store';
+import { I, UtilObject, keyboard, UtilCommon, Preview, translate } from 'Lib';
 
-class Navigation extends React.Component {
+const Navigation = observer(class Navigation extends React.Component {
 
 	_isMounted = false;
 	node: any = null;
@@ -24,18 +24,20 @@ class Navigation extends React.Component {
 	render () {
 		const cmd = keyboard.cmdSymbol();
 		const alt = keyboard.altSymbol();
-		const profile = detailStore.get(Constant.subId.profile, blockStore.profile);
+		const participant = UtilObject.getParticipant();
 		const isWin = UtilCommon.isPlatformWindows();
-		const cb = isWin ? `${alt} + ←` : `${cmd} + [`;
-		const cf = isWin ? `${alt} + →` : `${cmd} + ]`;
+		const isLinux = UtilCommon.isPlatformLinux();
+		const cb = isWin || isLinux ? `${alt} + ←` : `${cmd} + [`;
+		const cf = isWin || isLinux ? `${alt} + →` : `${cmd} + ]`;
+		const canWrite = UtilObject.canParticipantWrite();
 
 		const buttons: any[] = [
 			{ id: 'back', tooltip: translate('commonBack'), caption: cb, onClick: this.onBack, disabled: !keyboard.checkBack() },
 			{ id: 'forward', tooltip: translate('commonForward'), caption: cf, onClick: this.onForward, disabled: !keyboard.checkForward() },
-			{ id: 'plus', tooltip: translate('navigationCreateNew'), caption: `${cmd} + N`, onClick: this.onAdd },
+			canWrite ? { id: 'plus', tooltip: translate('navigationCreateNew'), caption: `${cmd} + N / ${cmd} + ${alt} + N`, onClick: this.onAdd, onContextMenu: () => keyboard.onQuickCapture() } : null, 
 			{ id: 'graph', tooltip: translate('commonGraph'), caption: `${cmd} + ${alt} + O`, onClick: this.onGraph },
 			{ id: 'search', tooltip: translate('commonSearch'), caption: `${cmd} + S`, onClick: this.onSearch },
-		];
+		].filter(it => it);
 
 		return (
 			<div 
@@ -55,7 +57,8 @@ class Navigation extends React.Component {
 							<div 
 								key={item.id} 
 								id={`button-navigation-${item.id}`}
-								onClick={item.onClick} 
+								onClick={item.onClick}
+								onContextMenu={item.onContextMenu}
 								className={cn.join(' ')}
 								onMouseEnter={e => item.disabled ? null : this.onTooltipShow(e, item.tooltip, item.caption)}
 								onMouseLeave={e => Preview.tooltipHide(false)}
@@ -68,12 +71,13 @@ class Navigation extends React.Component {
 					<div className="line" />
 
 					<div 
+						id="button-navigation-profile"
 						className="iconWrap"
 						onClick={this.onProfile}
-						onMouseEnter={e => this.onTooltipShow(e, translate('commonSettings'))}
+						onMouseEnter={e => this.onTooltipShow(e, translate('navigationAccount'), 'Ctrl + Tab')}
 						onMouseLeave={e => Preview.tooltipHide(false)}
 					>
-						<IconObject object={profile} />
+						<IconObject object={participant} />
 					</div>
 				</div>
 			</div>
@@ -101,10 +105,7 @@ class Navigation extends React.Component {
 
 	rebind () {
 		this.unbind();
-
-		const win = $(window);
-		win.on('resize.navigation', () => this.resize());
-		win.on('sidebarResize.navigation', () => this.forceUpdate());
+		$(window).on('resize.navigation sidebarResize.navigation', () => this.resize());
 	};
 
 	onBack () {
@@ -115,8 +116,8 @@ class Navigation extends React.Component {
 		keyboard.onForward();
 	};
 
-	onAdd () {
-		keyboard.pageCreate();
+	onAdd (e: any) {
+		e.altKey ? keyboard.onQuickCapture() : keyboard.pageCreate({}, 'Navigation');
 	};
 
 	onGraph () {
@@ -124,11 +125,15 @@ class Navigation extends React.Component {
 	};
 
 	onSearch () {
-		keyboard.onSearchPopup();
+		keyboard.onSearchPopup('Navigation');
 	};
 
 	onProfile () {
-		popupStore.open('settings', {});
+		if (menuStore.isOpen('space')) {
+			menuStore.close('space');
+		} else {
+			keyboard.onSpaceMenu(false);
+		};
 	};
 
 	resize () {
@@ -136,6 +141,7 @@ class Navigation extends React.Component {
 			return;
 		};
 
+		const win = $(window);
 		const node = $(this.node);
 		const { ww } = UtilCommon.getWindowDimensions();
 		const width = node.outerWidth();
@@ -152,6 +158,7 @@ class Navigation extends React.Component {
 			x += sw;
 		};
 		node.css({ left: x });
+		win.trigger('resize.menuSpace');
 	};
 
 	onTooltipShow (e: any, text: string, caption?: string) {
@@ -161,6 +168,6 @@ class Navigation extends React.Component {
 		};
 	};
 	
-};
+});
 
 export default Navigation;

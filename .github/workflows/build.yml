@@ -5,14 +5,17 @@ on:
     tags:        
       - v*
 
+permissions:
+  contents: 'write'
+
 jobs:
   release:
     runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
-        go-version: [ 1.16.x ]
-        os: [ macos-latest, ubuntu-latest, windows-latest ] 
+        go-version: [ 1.21 ]
+        os: [ macos-latest, ubuntu-latest, windows-latest ]
 
     steps:
       - name: Setup
@@ -27,10 +30,14 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v1
 
+      - name: Setup distutils
+        if: matrix.os != 'windows-latest'
+        run: sudo -H pip install setuptools
+
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v1
         with:
-          node-version: 16.19.0
+          node-version: 18.18.2
 
       - name: Install Webpack
         run: npm install --save-dev webpack-cli --legacy-peer-deps
@@ -54,6 +61,14 @@ jobs:
         run: |
           ./update-ci.sh ${{secrets.USER}} ${{secrets.TOKEN}} ${{matrix.os}} arm
           ./update-ci.sh ${{secrets.USER}} ${{secrets.TOKEN}} ${{matrix.os}} amd
+
+      - name: Build Native Messaging Host Windows
+        if: matrix.os == 'windows-latest'
+        run: npm run build:nmh-win
+
+      - name: Build Native Messaging Host
+        if: matrix.os != 'windows-latest'
+        run: npm run build:nmh
 
       - name: Build Front Mac OS
         if: matrix.os == 'macos-latest'
@@ -99,12 +114,13 @@ jobs:
       - name: Cleanup artifacts
         if: matrix.os != 'windows-latest'
         run: |
-          mv dist/*.{zip,dmg,deb,AppImage,exe,snap,rpm} artifacts || true
+          mv dist/*.{zip,dmg,deb,AppImage,exe,snap,rpm,tar.gz} artifacts || true
 
       - name: Cleanup artifacts Windows
         if: matrix.os == 'windows-latest'
         run: |
           rm dist/anytypeHelper.exe
+          rm dist/nativeMessagingHost.exe
           mv dist/*.exe artifacts
 
       - name: Release

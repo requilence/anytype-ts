@@ -1,4 +1,7 @@
 const { app, shell, BrowserWindow } = require('electron');
+const { is } = require('electron-util');
+const fs = require('fs');
+const path = require('path');
 const keytar = require('keytar');
 const { download } = require('electron-dl');
 
@@ -18,6 +21,13 @@ class Api {
 	isPinChecked = false;
 
 	appOnLoad (win) {
+		const cssPath = path.join(Util.userPath(), 'custom.css');
+
+		let css = '';
+		if (fs.existsSync(cssPath)) {
+			css = fs.readFileSync(cssPath, 'utf8');
+		};
+
 		Util.send(win, 'init', {
 			dataPath: Util.dataPath(),
 			config: ConfigManager.config,
@@ -28,9 +38,17 @@ class Api {
 			phrase: this.phrase,
 			isPinChecked: this.isPinChecked,
 			languages: win.webContents.session.availableSpellCheckerLanguages,
+			css: String(css || ''),
 		});
-
 		win.route = '';
+	};
+
+	logout (win) {
+		WindowManager.sendToAll('logout');
+	};
+
+	pinCheck (win) {
+		WindowManager.sendToAll('pin-check');
 	};
 
 	setConfig (win, config) {
@@ -53,15 +71,6 @@ class Api {
 		BrowserWindow.getAllWindows().forEach(win => win.setBackgroundColor(Util.getBgColor(theme)));
 	};
 
-	setLanguage (win, languages) {
-		languages = languages || [];
-
-		win.webContents.session.setSpellCheckerLanguages(languages);
-		win.webContents.session.setSpellCheckerEnabled(languages.length ? true : false);
-
-		this.setConfig(win, { languages });
-	};
-
 	setZoom (win, zoom) {
 		zoom = Number(zoom) || 0;
 		zoom = Math.max(-5, Math.min(5, zoom));
@@ -69,6 +78,24 @@ class Api {
 		win.webContents.setZoomLevel(zoom);
 		Util.send(win, 'zoom');
 		this.setConfig(win, { zoom });
+	};
+
+	setHideTray (win, show) {
+		ConfigManager.set({ hideTray: !show }, () => {
+			Util.send(win, 'config', ConfigManager.config);
+
+			MenuManager.initMenu();
+			MenuManager.initTray();
+		});
+	};
+
+	setMenuBarVisibility (win, show) {
+		ConfigManager.set({ hideMenuBar: !show }, () => {
+			Util.send(win, 'config', ConfigManager.config);
+
+			win.setMenuBarVisibility(show);
+			win.setAutoHideMenuBar(!show);
+		});
 	};
 
 	spellcheckAdd (win, s) {
@@ -104,7 +131,7 @@ class Api {
 	};
 
 	updateConfirm (win) {
-		this.exit(win, true);
+		this.exit(win, '', true);
 	};
 
 	updateCancel (win) {
@@ -153,22 +180,30 @@ class Api {
 		Util.log('info', '[Api].exit, relaunch: ' + relaunch);
 		Util.send(win, 'shutdownStart');
 
-		Server.stop(signal).then(() => { this.shutdown(win, relaunch); });
+		Server.stop(signal).then(() => this.shutdown(win, relaunch));
 	};
 
-	reloadAllWindows () {
-		BrowserWindow.getAllWindows().forEach(win => win.webContents.reload());
-	};
-
-	changeInterfaceLang (win, lang) {
-		console.log('[changeInterfaceLang]', lang);
-
+	setInterfaceLang (win, lang) {
 		ConfigManager.set({ interfaceLang: lang }, (err) => {
-			this.reloadAllWindows();
-
+			WindowManager.reloadAll();
 			MenuManager.initMenu();
 			MenuManager.initTray();
 		});
+	};
+
+	setSpellingLang (win, languages) {
+		languages = languages || [];
+
+		win.webContents.session.setSpellCheckerLanguages(languages);
+		win.webContents.session.setSpellCheckerEnabled(languages.length ? true : false);
+
+		this.setConfig(win, { languages });
+	};
+
+	setBadge (win, t) {
+		if (is.macos) {
+			app.dock.setBadge(t);
+		};
 	};
 
 };

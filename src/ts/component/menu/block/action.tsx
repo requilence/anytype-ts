@@ -1,7 +1,7 @@
 import * as React from 'react';
 import $ from 'jquery';
 import { Filter, MenuItemVertical } from 'Component';
-import { detailStore, blockStore, menuStore } from 'Store';
+import { detailStore, blockStore, menuStore, commonStore } from 'Store';
 import { I, C, keyboard, UtilData, UtilObject, UtilMenu, focus, Action, translate, analytics, Dataview, UtilCommon } from 'Lib';
 import Constant from 'json/constant.json';
 
@@ -61,8 +61,8 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 							<MenuItemVertical 
 								key={i} 
 								{...action} 
-								onMouseEnter={(e: any) => { this.onMouseEnter(e, action); }} 
-								onClick={(e: any) => { this.onClick(e, action); }} 
+								onMouseEnter={e => this.onMouseEnter(e, action)} 
+								onClick={e => this.onClick(e, action)} 
 							/>
 						);
 					})}
@@ -75,11 +75,13 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 				ref={node => this.node = node}
 			>
 				<Filter 
-					ref={ref => this.refFilter = ref} 
+					ref={ref => this.refFilter = ref}
+					className="outlined"
 					placeholderFocus={translate('menuBlockActionsFilterActions')}
 					value={filter}
 					onFocus={this.onFilterFocus} 
 					onChange={this.onFilterChange} 
+					focusOnMount={true}
 				/>
 				
 				{!sections.length ? <div className="item empty">{translate('commonFilterEmpty')}</div> : ''}
@@ -96,9 +98,8 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 		
 		this._isMounted = true;
 		this.rebind();
-		this.focus();
 
-		menu.off('mouseleave').on('mouseleave', () => { menuStore.clearTimeout(); });
+		menu.off('mouseleave').on('mouseleave', () => menuStore.clearTimeout());
 	};
 
 	componentDidUpdate () {
@@ -114,14 +115,6 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 		menuStore.clearTimeout();
 	};
 
-	focus () {
-		window.setTimeout(() => {
-			if (this.refFilter) {
-				this.refFilter.focus();
-			};
-		}, 15);
-	};
-	
 	onFilterFocus (e: any) {
 		menuStore.closeAll(Constant.menuIds.action);
 		this.props.setActive();
@@ -206,7 +199,6 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 			const align = { id: 'align', icon: '', name: translate('commonAlign'), children: [] };
 			const bgColor = { id: 'bgColor', icon: '', name: translate('commonBackground'), children: UtilMenu.getBgColors() };
 			const color = { id: 'color', icon: 'color', name: translate('commonColor'), arrow: true, children: UtilMenu.getTextColors() };
-			const dataview = { id: 'dataview', icon: '', name: translate('menuBlockActionsSectionsDataview'), children: UtilMenu.getDataviewActions(rootId, blockId) };
 
 			let hasTurnText = true;
 			let hasTurnObject = true;
@@ -259,7 +251,6 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 			if (hasTurnObject)	 sections.push(turnPage);
 			if (hasColor)		 sections.push(color);
 			if (hasBg)			 sections.push(bgColor);
-			if (hasDataview)	 sections.push(dataview);
 
 			if (hasAlign) {
 				sections.push({ 
@@ -271,7 +262,7 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 			if (hasAction) {
 				sections.push({ 
 					...action, 
-					children: UtilMenu.getActions({ hasText, hasFile, hasLink, hasBookmark }),
+					children: UtilMenu.getActions({ rootId, blockId, hasText, hasFile, hasLink, hasBookmark, hasDataview }),
 				});
 			};
 
@@ -320,17 +311,13 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 			};
 
 			const section1: any = { 
-				children: UtilMenu.getActions({ hasText, hasFile, hasLink, hasDataview, hasBookmark, hasTurnObject })
+				children: UtilMenu.getActions({ rootId, blockId, hasText, hasFile, hasLink, hasDataview, hasBookmark, hasTurnObject })
 			};
 
 			const section2: any = { 
 				children: [
 					// { id: 'comment', icon: 'comment', name: translate('commonComment') },
 				]
-			};
-
-			if (hasDataview) {
-				section2.children = section2.children.concat(UtilMenu.getDataviewActions(rootId, blockId));
 			};
 
 			if (hasLink) {
@@ -524,10 +511,9 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 					skipIds,
 					filters: [
 						{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.In, value: UtilObject.getPageLayouts() },
-						{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.NotIn, value: UtilObject.getSystemTypes() },
 					],
 					canAdd: true,
-					onSelect: () => { close(); }
+					onSelect: () => close()
 				});
 				break;
 			};
@@ -607,19 +593,19 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 				};
 				if (isCollection) {
 					addParam.onClick = () => {
-						C.ObjectCreate({ layout: I.ObjectLayout.Collection, type: Constant.typeId.collection }, [], '', () => onCreate());
+						C.ObjectCreate({ layout: I.ObjectLayout.Collection }, [], '', Constant.typeKey.collection, commonStore.space, () => onCreate());
 					};
 
 					filters = filters.concat([
-						{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.typeId.collection },
+						{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Collection },
 					]);
 				} else {
 					addParam.onClick = () => {
-						C.ObjectCreateSet([], {}, '', () => onCreate());
+						C.ObjectCreateSet([], {}, '', commonStore.space, () => onCreate());
 					};
 
 					filters = filters.concat([
-						{ operator: I.FilterOperator.And, relationKey: 'type', condition: I.FilterCondition.Equal, value: Constant.typeId.set },
+						{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.Equal, value: I.ObjectLayout.Set },
 						{ operator: I.FilterOperator.And, relationKey: 'setOf', condition: I.FilterCondition.NotEmpty, value: null },
 					]);
 				};
@@ -666,6 +652,7 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 		};
 
 		const ids = UtilData.selectionGet(blockId, false, false, data);
+		const targetObjectId = block.getTargetObjectId();
 
 		switch (item.itemId) {
 			case 'download': {
@@ -673,17 +660,15 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 				break;
 			};
 
-			case 'openBookmarkAsObject': {
-				UtilObject.openPopup({ id: block.content.targetObjectId, layout: I.ObjectLayout.Bookmark });
+			case 'openAsObject': {
+				UtilObject.openPopup(detailStore.get(rootId, targetObjectId));
 
-				analytics.event('OpenAsObject', { type: block.type });
-				break;
-			};
+				const event: any = { type: block.type };
+				if (block.isFile()) {
+					event.params = { fileType: block.content.type };
+				};
 
-			case 'openFileAsObject': {
-				UtilObject.openPopup({ id: block.content.hash, layout: I.ObjectLayout.File });
-
-				analytics.event('OpenAsObject', { type: block.type, params: { fileType: block.content.type } });
+				analytics.event('OpenAsObject', event);
 				break;
 			};
 
@@ -693,11 +678,6 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 				break;
 			};
 
-			case 'openDataviewObject': {
-				UtilObject.openPopup(detailStore.get(rootId, block.content.targetObjectId));
-				break;
-			};
-					
 			case 'copy': {
 				Action.duplicate(rootId, rootId, ids[ids.length - 1], ids, I.BlockPosition.Bottom);
 				break;
@@ -760,26 +740,12 @@ class MenuBlockAction extends React.Component<I.Menu, State> {
 		close();
 	};
 
-	moveToPage (type: string) {
-		const { param, dataset } = this.props;
+	moveToPage (typeId: string) {
+		const { param } = this.props;
 		const { data } = param;
 		const { blockId, rootId } = data;
-		const { selection } = dataset || {};
 		
-		let ids = [];
-		if (selection) {
-			ids = selection.get(I.SelectType.Block);
-		};
-		if (!ids.length) {
-			ids = [ blockId ];
-		};
-
-		C.BlockListConvertToObjects(rootId, ids, type, () => {
-			analytics.event('CreateObject', {
-				route: 'TurnInto',
-				objectType: type,
-			});
-		});
+		UtilData.moveToPage(rootId, blockId, typeId, 'TurnInto', this.props);
 	};
 
 	setFocus (id: string) {

@@ -13,6 +13,7 @@ export enum DropType {
 	Menu	 = 'menu',
 	Relation = 'relation',
 	Record	 = 'record',
+	Widget	 = 'widget',
 };
 
 export enum SelectType {
@@ -71,7 +72,6 @@ export interface HistoryVersion {
 	id: string;
 	previousIds: string[];
 	authorId: string;
-	authorName: string;
 	groupId: number;
 	time: number;
 };
@@ -119,10 +119,12 @@ export enum EdgeType {
 
 export enum Usecase {
 	None		 = 0,
-	Personal	 = 1,
-    Knowledge	 = 2,
-    Notes		 = 3,
-	Strategic 	 = 4,
+	GetStarted	 = 1,
+	Personal	 = 2,
+    Knowledge	 = 3,
+    Notes		 = 4,
+	Strategic 	 = 5,
+	Empty		 = 6,
 };
 
 export enum HomePredefinedId {
@@ -179,6 +181,7 @@ export interface ButtonComponent {
 	tooltipY?: I.MenuDirection.Top | I.MenuDirection.Bottom;
 	showDot?: boolean;
 	onClick?(e: any): void;
+	onMouseDown?(e: any): void;
 	onMouseEnter?(e: any): void;
 };
 
@@ -195,10 +198,6 @@ export enum SliceOperation {
     Move	 = 2,
 	Remove	 = 3,
     Replace	 = 4,
-};
-
-export enum SpaceType {
-	Personal	 = 0,
 };
 
 export interface Dataset {
@@ -229,4 +228,26 @@ export enum FileSyncStatus {
 export enum StoreTab {
 	Type = 'type',
 	Relation = 'relation',
+};
+
+export enum BannerType {
+	None			 = 0,
+	IsArchived		 = 1,
+	IsTemplate		 = 2,
+	TemplateSelect	 = 3,
+};
+
+export enum ObjectManagerItemInfo {
+	Description 	= 0,
+	FileSize 		= 1,
+};
+
+export enum ObjectManagerPopup {
+	Favorites 	= 0,
+};
+
+export enum NetworkMode {
+	Default		 = 0,
+	Local		 = 1,
+	Custom		 = 2,
 };

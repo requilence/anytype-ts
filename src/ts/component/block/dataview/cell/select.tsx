@@ -36,20 +36,19 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 	};
 
 	render () {
-		const { relation, getRecord, recordId, elementMapper, arrayLimit } = this.props;
+		const { relation, record, elementMapper, arrayLimit } = this.props;
 		const { isEditing } = this.state;
-		const record = getRecord(recordId);
-		const isStatus = relation.format == I.RelationType.Status;
+		const placeholder = this.props.placeholder || translate(`placeholderCell${relation.format}`);
+		const isSelect = relation.format == I.RelationType.Select;
 		const cn = [ 'wrap' ];
 
 		if (!relation || !record) {
 			return null;
 		};
 
-		let content = null;
 		let value = this.getItems();
+		let content = null;
 
-		const placeholder = this.props.placeholder || translate(`placeholderCell${relation.format}`);
 		const length = value.length;
 
 		if (elementMapper) {
@@ -66,7 +65,7 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 		if (isEditing) {
 			const cni = [ 'itemWrap' ];
 
-			if (!isStatus) {
+			if (!isSelect) {
 				cni.push('isDraggable');
 			};
 
@@ -81,16 +80,17 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 									key={i}
 									id={`item-${item.id}`}
 									className={cni.join(' ')}
-									draggable={!isStatus}
+									draggable={!isSelect}
+									onContextMenu={e => this.onContextMenu(e, item)}
 									{...UtilCommon.dataProps({ id: item.id, index: i })}
 								>
 									<Tag 
 										key={item.id}
 										text={item.name}
 										color={item.color}
-										canEdit={!isStatus} 
+										canEdit={!isSelect} 
 										className={Relation.selectClassName(relation.format)}
-										onRemove={() => { this.onValueRemove(item.id); }}
+										onRemove={() => this.onValueRemove(item.id)}
 									/>
 								</span>
 							))}
@@ -112,7 +112,7 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 						{'\n'}
 					</span>
 
-					{isStatus ? <Icon className="clear" onMouseDown={this.onClear} /> : ''}
+					{isSelect ? <Icon className="clear" onMouseDown={this.onClear} /> : ''}
 				</div>
 			);
 		} else {
@@ -123,10 +123,12 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 					<span className="over">
 						{value.map((item: any, i: number) => (
 							<Tag 
+								id={`item-${item.id}`}
 								key={item.id} 
 								text={item.name} 
 								color={item.color}
-								className={Relation.selectClassName(relation.format)} 
+								className={Relation.selectClassName(relation.format)}
+								onContextMenu={e => this.onContextMenu(e, item)}
 							/>
 						))}
 						{arrayLimit && (length > arrayLimit) ? <div className="more">+{length - arrayLimit}</div> : ''}
@@ -202,7 +204,7 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 		const node = $(this.node);
 		const entry = node.find('#entry');
 
-		keyboard.shortcut('backspace', e, (pressed: string) => {
+		keyboard.shortcut('backspace', e, () => {
 			e.stopPropagation();
 
 			const range = getRange(entry.get(0));
@@ -319,11 +321,30 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 		this.setValue([]);
 	};
 
-	getItems (): any[] {
-		const { relation, getRecord, recordId } = this.props;
-		const record = getRecord(recordId);
+	onContextMenu (e: React.MouseEvent, item: any) {
+		const { id, canEdit, menuClassName, menuClassNameWrap } = this.props;
 
-		return record && relation ? Relation.getOptions(record[relation.relationKey]) : [];
+		if (!canEdit) {
+			return;
+		};
+
+		e.preventDefault();
+		e.stopPropagation();
+
+		menuStore.open('dataviewOptionEdit', { 
+			element: `#${id} #item-${item.id}`,
+			className: menuClassName,
+			classNameWrap: menuClassNameWrap,
+			offsetY: 4,
+			data: {
+				option: item,
+			}
+		});
+	};
+
+	getItems (): any[] {
+		const { relation, record } = this.props;
+		return relation && record ? Relation.getOptions(record[relation.relationKey]).filter(it => !it.isArchived && !it.isDeleted) : [];
 	};
 
 	getItemIds (): string[] {
@@ -358,8 +379,9 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 		
 		value = UtilCommon.arrayUnique(value);
 
-		if (maxCount && value.length > maxCount) {
-			value = value.slice(value.length - maxCount, value.length);
+		const length = value.length;
+		if (maxCount && (length > maxCount)) {
+			value = value.slice(length - maxCount, length);
 		};
 
 		if (onChange) {
@@ -372,8 +394,7 @@ const CellSelect = observer(class CellSelect extends React.Component<I.Cell, Sta
 	};
 
 	resize () {
-		const win = $(window);
-		win.trigger('resize.menuDataviewOptionList');
+		$(window).trigger('resize.menuDataviewOptionList');
 	};
 
 });

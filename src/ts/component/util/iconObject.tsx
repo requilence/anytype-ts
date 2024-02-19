@@ -2,10 +2,10 @@ import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { IconEmoji } from 'Component';
-import { I, Preview, UtilSmile, UtilData, UtilFile, UtilObject } from 'Lib';
+import { I, Preview, UtilSmile, UtilData, UtilFile, UtilObject, UtilCommon, translate } from 'Lib';
 import { commonStore, menuStore } from 'Store';
-import Constant from 'json/constant.json';
 import Colors from 'json/colors.json';
+import Theme from 'json/theme.json';
 
 interface Props {
 	id?: string;
@@ -25,12 +25,14 @@ interface Props {
 	tooltipY?: I.MenuDirection.Top | I.MenuDirection.Bottom;
 	color?: string;
 	forceLetter?: boolean;
+	noGallery?: boolean;
+	noUpload?: boolean;
 	noRemove?: boolean;
 	noClick?: boolean;
 	menuParam?: Partial<I.MenuParam>;
 	getObject?(): any;
 	onSelect?(id: string): void;
-	onUpload?(hash: string): void;
+	onUpload?(objectId: string): void;
 	onClick?(e: any): void;
 	onCheckbox?(e: any): void;
 	onMouseEnter?(e: any): void;
@@ -39,11 +41,9 @@ interface Props {
 
 const LAYOUT_EMOJI = [ 
 	I.ObjectLayout.Page, 
-	I.ObjectLayout.Set, 
-	I.ObjectLayout.Collection,
 	I.ObjectLayout.Type,
-	I.ObjectLayout.Space,
-];
+	I.ObjectLayout.SpaceView,
+].concat(UtilObject.getSetLayouts());
 
 const IconSize = {
 	14: 14,
@@ -90,64 +90,22 @@ const FontSize = {
 	128: 72,
 };
 
-const File = {
-	other: require('img/icon/file/other.svg').default,
-	image: require('img/icon/file/image.svg').default,
-	video: require('img/icon/file/video.svg').default,
-	text: require('img/icon/file/text.svg').default,
-	archive: require('img/icon/file/archive.svg').default,
-	audio: require('img/icon/file/audio.svg').default,
-	pdf: require('img/icon/file/pdf.svg').default,
-	presentation: require('img/icon/file/presentation.svg').default,
-	table: require('img/icon/file/table.svg').default,
-};
-
 const Relation: any = { small: {}, big: {} };
-Relation.small[I.RelationType.LongText] = require('img/icon/relation/small/longText.svg').default;
-Relation.small[I.RelationType.ShortText] = require('img/icon/relation/small/shortText.svg').default;
-Relation.small[I.RelationType.Number] = require('img/icon/relation/small/number.svg').default;
-Relation.small[I.RelationType.Status] = require('img/icon/relation/small/status.svg').default;
-Relation.small[I.RelationType.Date] = require('img/icon/relation/small/date.svg').default;
-Relation.small[I.RelationType.File] = require('img/icon/relation/small/file.svg').default;
-Relation.small[I.RelationType.Checkbox] = require('img/icon/relation/small/checkbox.svg').default;
-Relation.small[I.RelationType.Url] = require('img/icon/relation/small/url.svg').default;
-Relation.small[I.RelationType.Email] = require('img/icon/relation/small/email.svg').default;
-Relation.small[I.RelationType.Phone] = require('img/icon/relation/small/phone.svg').default;
-Relation.small[I.RelationType.Tag] = require('img/icon/relation/small/tag.svg').default;
-Relation.small[I.RelationType.Object] = require('img/icon/relation/small/object.svg').default;
 
-Relation.big[I.RelationType.LongText] = require('img/icon/relation/big/longText.svg').default;
-Relation.big[I.RelationType.ShortText] = require('img/icon/relation/big/shortText.svg').default;
-Relation.big[I.RelationType.Number] = require('img/icon/relation/big/number.svg').default;
-Relation.big[I.RelationType.Status] = require('img/icon/relation/big/status.svg').default;
-Relation.big[I.RelationType.Date] = require('img/icon/relation/big/date.svg').default;
-Relation.big[I.RelationType.File] = require('img/icon/relation/big/file.svg').default;
-Relation.big[I.RelationType.Checkbox] = require('img/icon/relation/big/checkbox.svg').default;
-Relation.big[I.RelationType.Url] = require('img/icon/relation/big/url.svg').default;
-Relation.big[I.RelationType.Email] = require('img/icon/relation/big/email.svg').default;
-Relation.big[I.RelationType.Phone] = require('img/icon/relation/big/phone.svg').default;
-Relation.big[I.RelationType.Tag] = require('img/icon/relation/big/tag.svg').default;
-Relation.big[I.RelationType.Object] = require('img/icon/relation/big/object.svg').default;
+for (const i in I.RelationType) {
+	const it = Number(i);
+
+	if (isNaN(Number(it)) || [ I.RelationType.Icon, I.RelationType.Relations ].includes(it)) {
+		continue;
+	};
+
+	const key = UtilCommon.toCamelCase(I.RelationType[i]);
+
+	Relation.small[i] = require(`img/icon/relation/small/${key}.svg`).default;
+	Relation.big[i] = require(`img/icon/relation/big/${key}.svg`).default;
+};
 
 const Ghost = require('img/icon/ghost.svg').default;
-
-const BgColor = {
-	grey:	 '#f2f2f2',
-	black:	 '#252525',
-	brown:	 '#b6b6b6',
-	orange:	 '#ffb522',
-	red:	 '#f55522',
-	purple:	 '#ab50cc',
-	blue:	 '#3e58eb',
-	teal:	 '#0fc8ba',
-	lime:	 '#5dd400',
-	green:	 '#57c600',
-};
-
-const Color = {
-	'':		 '#b6b6b6',
-	dark:	 '#dfddd3'
-};
 
 const CheckboxTask = {
 	'': {
@@ -161,13 +119,6 @@ const CheckboxTask = {
 		2: require('img/icon/object/checkbox2.svg').default,
 	},
 };
-
-const Theme = {
-	dark: {
-		grey: '#484843',
-	}
-};
-
 
 const IconObject = observer(class IconObject extends React.Component<Props> {
 
@@ -224,29 +175,20 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 				};
 
 				if (iconEmoji || iconImage || iconClass) {
-					icon = <IconEmoji {...this.props} className={icn.join(' ')} iconClass={iconClass} size={iconSize} icon={iconEmoji} hash={iconImage} />;
+					icon = <IconEmoji {...this.props} className={icn.join(' ')} iconClass={iconClass} size={iconSize} icon={iconEmoji} objectId={iconImage} />;
 				} else 
-				if (iconOption) {
-					cn.push('withOption withImage');
-
-					icn = icn.concat([ 'iconImage', 'c' + iconSize ]);
-					icon = <img src={this.userGradientSvg(0.35)} className={icn.join(' ')} />;
-				} else
 				if (forceLetter) {
 					onLetter();
 				};
 				break;
 			};
 
-			case I.ObjectLayout.Human: {
+			case I.ObjectLayout.Human: 
+			case I.ObjectLayout.Participant: {
 				if (iconImage) {
 					cn.push('withImage');
 					icn = icn.concat([ 'iconImage', 'c' + iconSize ]);
 					icon = <img src={commonStore.imageUrl(iconImage, iconSize * 2)} className={icn.join(' ')} />;
-				} else 
-				if (iconOption) {
-					icn = icn.concat([ 'iconImage', 'c' + iconSize ]);
-					icon = <img src={this.userGradientSvg(0.5)} className={icn.join(' ')} />;
 				} else {
 					icn = icn.concat([ 'iconImage', 'c' + iconSize ]);
 					icon = <img src={this.userSvg()} className={icn.join(' ')} />;
@@ -267,7 +209,7 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 
 			case I.ObjectLayout.Type: {
 				if (iconEmoji) {
-					icon = <IconEmoji {...this.props} className={icn.join(' ')} iconClass={iconClass} size={iconSize} icon={iconEmoji} hash={iconImage} />;
+					icon = <IconEmoji {...this.props} className={icn.join(' ')} iconClass={iconClass} size={iconSize} icon={iconEmoji} objectId={iconImage} />;
 				} else 
 				if (forceLetter) {
 					onLetter();
@@ -281,7 +223,7 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 				};
 
 				if (iconEmoji || iconImage) {
-					icon = <IconEmoji {...this.props} className={icn.join(' ')} iconClass={iconClass} size={iconSize} icon={iconEmoji} hash={iconImage} />;
+					icon = <IconEmoji {...this.props} className={icn.join(' ')} iconClass={iconClass} size={iconSize} icon={iconEmoji} objectId={iconImage} />;
 				} else 
 				if (forceLetter) {
 					onLetter();
@@ -298,18 +240,6 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 				break;
 			};
 
-			case I.ObjectLayout.Image: {
-				if (id) {
-					cn.push('withImage');
-					icn = icn.concat([ 'iconImage', 'c' + iconSize ]);
-					icon = <img src={commonStore.imageUrl(id, iconSize * 2)} className={icn.join(' ')} />;
-				} else {
-					icn = icn.concat([ 'iconFile', 'c' + iconSize ]);
-					icon = <img src={File[UtilFile.icon(object)]} className={icn.join(' ')} />;
-				};
-				break;
-			};
-
 			case I.ObjectLayout.Bookmark: {
 				if (iconImage) {
 					icn = icn.concat([ 'iconCommon', 'c' + iconSize ]);
@@ -318,9 +248,39 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 				break;
 			};
 
+			case I.ObjectLayout.Image: {
+				if (id) {
+					cn.push('withImage');
+					icn = icn.concat([ 'iconImage', 'c' + iconSize ]);
+					icon = <img src={commonStore.imageUrl(id, iconSize * 2)} className={icn.join(' ')} />;
+				} else {
+					icn = icn.concat([ 'iconFile', 'c' + iconSize ]);
+					icon = <img src={UtilFile.iconImage(object)} className={icn.join(' ')} />;
+				};
+				break;
+			};
+
+			case I.ObjectLayout.Video:
+			case I.ObjectLayout.Audio:
+			case I.ObjectLayout.Pdf:
 			case I.ObjectLayout.File: {
 				icn = icn.concat([ 'iconFile', 'c' + iconSize ]);
-				icon = <img src={File[UtilFile.icon(object)]} className={icn.join(' ')} />;
+				icon = <img src={UtilFile.iconImage(object)} className={icn.join(' ')} />;
+				break;
+			};
+
+			case I.ObjectLayout.SpaceView: {
+				if (iconImage) {
+					cn.push('withImage');
+					icn = icn.concat([ 'iconImage', 'c' + iconSize ]);
+					icon = <img src={commonStore.imageUrl(iconImage, iconSize * 2)} className={icn.join(' ')} />;
+				} else 
+				if (iconOption) {
+					cn.push('withOption withImage');
+
+					icn = icn.concat([ 'iconImage', 'c' + iconSize ]);
+					icon = <img src={this.gradientSvg(0.35)} className={icn.join(' ')} />;
+				}
 				break;
 			};
 
@@ -406,6 +366,8 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 		const { canEdit, onClick, onCheckbox } = this.props;
 		const object = this.getObject();
 		const { layout } = object;
+		const isTask = layout == I.ObjectLayout.Task;
+		const isEmoji = LAYOUT_EMOJI.includes(layout);
 
 		if (onClick) {
 			onClick(e);
@@ -415,13 +377,15 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 			return;
 		};
 
-		if (layout == I.ObjectLayout.Task) {
+		if (isTask || isEmoji) {
+			e.preventDefault();
 			e.stopPropagation();
-			onCheckbox(e);
 		};
 
-		if (LAYOUT_EMOJI.includes(layout)) {
-			e.stopPropagation();
+		if (isTask) {
+			onCheckbox(e);
+		} else
+		if (isEmoji) {
 			this.onEmoji(e);
 		};
 	};
@@ -432,13 +396,15 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 		const { id, offsetX, offsetY, onSelect, onUpload, noRemove, menuParam } = this.props;
 		const object = this.getObject();
 		const { iconEmoji, iconImage, layout } = object;
-		const noUpload = layout == I.ObjectLayout.Type;
+		const noGallery = this.props.noGallery || (layout == I.ObjectLayout.SpaceView);
+		const noUpload = this.props.noUpload || (layout == I.ObjectLayout.Type);
 
 		menuStore.open('smile', { 
 			element: `#${id}`,
 			offsetX,
 			offsetY,
 			data: {
+				noGallery,
 				noUpload,
 				noRemove: noRemove || !(iconEmoji || iconImage),
 				onSelect: (icon: string) => {
@@ -446,10 +412,9 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 						onSelect(icon);
 					};
 				},
-
-				onUpload: (hash: string) => {
+				onUpload: (objectId: string) => {
 					if (onUpload) {
-						onUpload(hash);
+						onUpload(objectId);
 					};
 				}
 			},
@@ -475,11 +440,11 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 			s = 28;
 		};
 
-		if ((layout == I.ObjectLayout.Human) && (size >= 40)) {
+		if ([ I.ObjectLayout.Human, I.ObjectLayout.Participant ].includes(layout) && (size >= 40)) {
 			s = size;
 		};
 
-		if ((layout == I.ObjectLayout.Set) && iconImage) {
+		if ([ I.ObjectLayout.Set, I.ObjectLayout.SpaceView ].includes(layout) && iconImage) {
 			s = size;
 		};
 
@@ -508,17 +473,11 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 	};
 
 	svgBgColor () {
-		const { color } = this.props;
-		const theme = commonStore.getThemeClass();
-
-		if (Theme[theme] && Theme[theme][color]) {
-			return Theme[theme][color];
-		};
-		return BgColor[color];
+		return Theme[commonStore.getThemeClass()]?.icon.bg[this.props.color];
 	};
 
 	svgColor () {
-		return Color[commonStore.getThemeClass()];
+		return Theme[commonStore.getThemeClass()]?.icon.text;
 	};
 
 	userSvg (): string {
@@ -539,7 +498,7 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 		return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
 	};
 
-	userGradientSvg (radius: number): string {
+	gradientSvg (radius: number): string {
 		const object = this.getObject();
 		const iconSize = this.iconSize();
 		const option = Colors.gradientIcons.options[object.iconOption - 1] as any;
@@ -580,7 +539,7 @@ const IconObject = observer(class IconObject extends React.Component<Props> {
 	iconName () {
 		const object = this.getObject();
 
-		let name = String(object.name || UtilObject.defaultName('Page'));
+		let name = String(object.name || translate('defaultNamePage'));
 		name = UtilSmile.strip(name);
 		name = name.trim().substring(0, 1).toUpperCase();
 

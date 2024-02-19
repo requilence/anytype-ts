@@ -4,7 +4,7 @@ import { observer } from 'mobx-react';
 import { AutoSizer, CellMeasurer, CellMeasurerCache, InfiniteLoader, List as VList } from 'react-virtualized';
 import { Loader, Select, Label } from 'Component';
 import { blockStore, dbStore, detailStore } from 'Store';
-import { Dataview, I, C, M, UtilCommon, Relation, keyboard, UtilObject, translate, Action } from 'Lib';
+import { Dataview, I, C, M, UtilCommon, Relation, keyboard, UtilObject, translate, Action, UtilRouter } from 'Lib';
 import { SortableContainer } from 'react-sortable-hoc';
 import arrayMove from 'array-move';
 import WidgetListItem from './item';
@@ -35,7 +35,7 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 	constructor (props: Props) {
 		super(props);
 		
-		this.onSortStart = this.onSortStart.bind(this)
+		this.onSortStart = this.onSortStart.bind(this);
 		this.onSortEnd = this.onSortEnd.bind(this);
 	};
 
@@ -45,12 +45,12 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 		const { targetBlockId } = block.content;
 		const { isLoading } = this.state;
 		const rootId = this.getRootId();
-		const views = dbStore.getViews(rootId, BLOCK_ID).map(it => ({ ...it, name: it.name || UtilObject.defaultName('Page') }));
+		const views = dbStore.getViews(rootId, BLOCK_ID).map(it => ({ ...it, name: it.name || translate('defaultNamePage') }));
 		const subId = dbStore.getSubId(rootId, BLOCK_ID);
 		const { total } = dbStore.getMeta(subId, '');
 		const isSelect = !isPreview || !UtilCommon.isPlatformMac();
-		const records = this.getRecords();
-		const length = records.length;
+		const items = this.getItems();
+		const length = items.length;
 
 		if (!this.cache) {
 			return null;
@@ -58,10 +58,7 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 
 		let content = null;
 
-		if (isLoading) {
-			content = <Loader />;
-		} else
-		if (!length) {
+		if (!isLoading && !length) {
 			content = <Label className="empty" text={translate('widgetEmptyLabel')} />;
 		} else
 		if (isPreview) {
@@ -75,9 +72,10 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 					fixedWidth
 				>
 					<WidgetListItem 
-						{...this.props} 
+						{...this.props}
+						{...items[index]}
 						subId={subId} 
-						id={records[index]} 
+						id={items[index].id}
 						style={style} 
 						index={index}
 					/>
@@ -100,7 +98,7 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 										height={height}
 										deferredMeasurmentCache={this.cache}
 										rowCount={length}
-										rowHeight={this.getRowHeight()}
+										rowHeight={({ index }) => this.getRowHeight(items[index], index)}
 										rowRenderer={rowRenderer}
 										onRowsRendered={onRowsRendered}
 										overscanRowCount={LIMIT}
@@ -130,8 +128,8 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 		} else {
 			content = (
 				<React.Fragment>
-					{records.map((id: string) => (
-						<WidgetListItem key={`widget-${block.id}-${id}`} {...this.props} subId={subId} id={id} />
+					{items.map((item: any) => (
+						<WidgetListItem key={`widget-${block.id}-${item.id}`} {...this.props} {...item} subId={subId} id={item.id} />
 					))}
 				</React.Fragment>
 			);
@@ -202,7 +200,7 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 		} else {
 			this.setState({ isLoading: true });
 
-			C.ObjectShow(targetBlockId, this.getTraceId(), () => {
+			C.ObjectShow(targetBlockId, this.getTraceId(), UtilRouter.getRouteSpaceId(), () => {
 				this.setState({ isLoading: false });
 
 				const view = Dataview.getView(this.getRootId(), BLOCK_ID, viewId);
@@ -211,6 +209,9 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 				};
 			});
 		};
+
+		this.initCache();
+		this.forceUpdate();
 	};
 
 	componentDidUpdate (): void {
@@ -219,29 +220,29 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 		const { targetBlockId } = block.content;
 		const rootId = this.getRootId();
 		const view = Dataview.getView(rootId, BLOCK_ID);
-		const records = this.getRecords();		
 
 		if (!isCollection(targetBlockId) && view && (viewId != view.id)) {
 			this.load(viewId);
 		};
 
-		if (!this.cache) {
-			this.cache = new CellMeasurerCache({
-				fixedWidth: true,
-				defaultHeight: this.getRowHeight(),
-				keyMapper: i => records[i],
-			});
-		};
-
+		this.initCache();
 		this.resize();
 	};
 
 	componentWillUnmount(): void {
-		const rootId = this.getRootId();
-		const subId = dbStore.getSubId(rootId, BLOCK_ID);
+		C.ObjectSearchUnsubscribe([ dbStore.getSubId(this.getRootId(), BLOCK_ID) ]);
+	};
 
-		dbStore.recordsClear(subId, '');
-		C.ObjectSearchUnsubscribe([ subId ]);
+	initCache () {
+		if (!this.cache) {
+			const items = this.getItems();
+
+			this.cache = new CellMeasurerCache({
+				fixedWidth: true,
+				defaultHeight: i => this.getRowHeight(items[i], i),
+				keyMapper: i => items[i],
+			});
+		};
 	};
 
 	updateData () {
@@ -295,7 +296,7 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 		const { block } = this.props;
 		const { targetBlockId } = block.content;
 
-		return [ targetBlockId, this.getTraceId() ].join('-');
+		return [ targetBlockId, 'widget', block.id ].join('-');
 	};
 
 	load = (viewId: string) => {
@@ -305,7 +306,7 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 		const object = detailStore.get(widgets, targetBlockId);
 		const setOf = Relation.getArrayValue(object.setOf);
 		const target = detailStore.get(widgets, targetBlockId);
-		const isCollection = target.type == Constant.typeId.collection;
+		const isCollection = target.layout == I.ObjectLayout.Collection;
 		const limit = getLimit(parent.content);
 
 		if (!setOf.length && !isCollection) {
@@ -377,9 +378,26 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 		return (targetBlockId == Constant.widgetId.favorite) ? sortFavorite(ret) : ret;
 	};
 
+	getItems () {
+		const { block, addGroupLabels, isPreview } = this.props;
+		const rootId = this.getRootId();
+		const subId = dbStore.getSubId(rootId, BLOCK_ID);
+		const { targetBlockId } = block.content;
+		const isRecent = [ Constant.widgetId.recentOpen, Constant.widgetId.recentEdit ].includes(targetBlockId);
+
+		let items = this.getRecords().map(id => detailStore.get(subId, id, Constant.sidebarRelationKeys));
+
+		if (isPreview && isRecent) {
+			// add group labels
+			items = addGroupLabels(items, targetBlockId);
+		};
+
+		return items;
+	};
+
 	resize () {
 		const { parent, isPreview } = this.props;
-		const length = this.getRecords().length;
+		const length = this.getItems().length;
 
 		raf(() => {
 			const node = $(this.node);
@@ -390,7 +408,7 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 			const viewItem = viewSelect.find('.viewItem');
 			const offset = isPreview ? 20 : 8;
 
-			let height = this.getRowHeight() * length + offset;
+			let height = this.getTotalHeight() + offset;
 			if (isPreview) {
 				let maxHeight = $('#listWidget').height() - head.outerHeight(true);
 				if (viewSelect.length) {
@@ -416,7 +434,22 @@ const WidgetList = observer(class WidgetList extends React.Component<Props, Stat
 		});
 	};
 
-	getRowHeight () {
+	getTotalHeight () {
+		const items = this.getItems();
+
+		let height = 0;
+
+		items.forEach((item, index) => {
+			height += this.getRowHeight(item, index);
+		});
+
+		return height;
+	};
+
+	getRowHeight (item: any, index: number) {
+		if (item && item.isSection) {
+			return index ? HEIGHT_COMPACT + 12 : HEIGHT_COMPACT;
+		};
 		return this.props.isCompact ? HEIGHT_COMPACT : HEIGHT_LIST;
 	};
 

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
-import { I, UtilCommon, UtilData, UtilObject, keyboard, translate, Relation } from 'Lib';
+import { I, UtilCommon, UtilData, UtilObject, keyboard, translate, Relation, UtilDate } from 'Lib';
 import { Input, IconObject } from 'Component';
 import { commonStore, menuStore } from 'Store';
 import Constant from 'json/constant.json';
@@ -21,6 +21,7 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 	range: any = null;
 	ref = null;
 	value: any = null;
+	isComposition = false;
 
 	constructor (props: I.Cell) {
 		super(props);
@@ -33,12 +34,14 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 		this.onIconSelect = this.onIconSelect.bind(this);
 		this.onIconUpload = this.onIconUpload.bind(this);
 		this.onCheckbox = this.onCheckbox.bind(this);
+		this.onCompositionStart = this.onCompositionStart.bind(this);
+		this.onCompositionEnd = this.onCompositionEnd.bind(this);
 	};
 
 	render () {
 		const { isEditing } = this.state;
-		const { recordId, relation, getView, getRecord, textLimit, isInline, iconSize, placeholder, shortUrl } = this.props;
-		const record = getRecord(recordId);
+		const { showRelativeDates } = commonStore;
+		const { record, relation, getView, textLimit, isInline, iconSize, placeholder, shortUrl, canEdit } = this.props;
 		
 		if (!record || !relation) {
 			return null;
@@ -122,6 +125,7 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 						{...item} 
 						placeholder={placeholder || translate(`placeholderCell${relation.format}`)}
 						onSelect={this.onSelect}
+						
 					/>
 				);
 			};
@@ -133,6 +137,8 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 					onKeyUp={this.onKeyUp} 
 					onFocus={this.onFocus} 
 					onBlur={this.onBlur}
+					onCompositionStart={this.onCompositionStart}
+					onCompositionEnd={this.onCompositionEnd}
 				/>
 			);
 		} else {
@@ -147,11 +153,7 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 					content = <div className="name">{name}</div>;
 				} else {
 					if (isName && (record.layout == I.ObjectLayout.Note)) {
-						content = (
-							<span className="emptyText">
-								{translate('commonEmpty')}
-							</span>
-						);
+						content = <span className="emptyText">{translate('commonEmpty')}</span>;
 					} else {
 						content = (
 							<div className="empty">
@@ -167,9 +169,9 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 				if (value !== null) {
 					value = Number(value) || 0;
 
-					const day = UtilCommon.dayString(value);
-					const date = day ? day : UtilCommon.date(UtilData.dateFormat(viewRelation.dateFormat), value);
-					const time = UtilCommon.date(UtilData.timeFormat(viewRelation.timeFormat), value);
+					const day = showRelativeDates ? UtilDate.dayString(value) : null;
+					const date = day ? day : UtilDate.date(UtilDate.dateFormat(viewRelation.dateFormat), value);
+					const time = UtilDate.date(UtilData.timeFormat(viewRelation.timeFormat), value);
 					
 					value = viewRelation.includeTime ? [ date, time ].join((day ? ', ' : ' ')) : date;
 				} else {
@@ -201,7 +203,7 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 						onUpload={this.onIconUpload}
 						onCheckbox={this.onCheckbox}
 						size={iconSize} 
-						canEdit={!record.isReadonly} 
+						canEdit={canEdit} 
 						offsetY={4} 
 						object={record} 
 						noClick={true}
@@ -213,7 +215,7 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 				if (record.layout == I.ObjectLayout.Note) {
 					value = record.snippet;
 				} else {
-					value = value || UtilObject.defaultName('Page');
+					value = value || translate('defaultNamePage');
 				};
 			};
 		};
@@ -227,8 +229,7 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 	};
 
 	componentDidMount () {
-		const { relation, recordId, getRecord } = this.props;
-		const record = getRecord(recordId);
+		const { relation, record } = this.props;
 
 		this._isMounted = true;
 		this.setValue(Relation.formatValue(relation, record[relation.relationKey], true));
@@ -236,9 +237,8 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 
 	componentDidUpdate () {
 		const { isEditing } = this.state;
-		const { id, relation, recordId, viewType, cellPosition, getView, getRecord } = this.props;
+		const { id, relation, viewType, record, cellPosition, getView } = this.props;
 		const cell = $(`#${id}`);
-		const record = getRecord(recordId);
 
 		this.setValue(Relation.formatValue(relation, record[relation.relationKey], true));
 
@@ -252,14 +252,14 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 		};
 
 		if (viewType != I.ViewType.Grid) {
-			card = $(`#record-${recordId}`);
+			card = $(`#record-${record.id}`);
 		};
 
 		if (isEditing) {
 			let value = this.value;
 
 			if (relation.relationKey == 'name') {
-				if (value == UtilObject.defaultName('Page')) {
+				if (value == translate('defaultNamePage')) {
 					value = '';
 				};
 			} else
@@ -271,7 +271,7 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 					format.push('H:i');
 				};
 
-				value = this.value !== null ? UtilCommon.date(format.join(' ').trim(), this.value) : '';
+				value = this.value !== null ? UtilDate.date(format.join(' ').trim(), this.value) : '';
 			} else
 			if (relation.format == I.RelationType.Number) {
 				value = Relation.formatValue(relation, this.value, true);
@@ -350,18 +350,20 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 
 		this.setValue(value);
 
-		keyboard.shortcut('enter, escape', e, () => {
-			e.preventDefault();
+		if (!this.isComposition) {
+			keyboard.shortcut('enter, escape', e, () => {
+				e.preventDefault();
 
-			if (onChange) {
-				onChange(value, () => {
-					menuStore.closeAll(Constant.menuIds.cell);
+				if (onChange) {
+					onChange(value, () => {
+						menuStore.closeAll(Constant.menuIds.cell);
 
-					this.range = null;
-					this.setEditing(false);
-				});
-			};
-		});
+						this.range = null;
+						this.setEditing(false);
+					});
+				};
+			});
+		};
 	};
 
 	onKeyUpDate (e: any, value: any) {
@@ -373,13 +375,15 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 			menuStore.updateData(MENU_ID, { value: this.value });
 		};
 
-		keyboard.shortcut('enter', e, (pressed: string) => {
-			e.preventDefault();
+		if (!this.isComposition) {
+			keyboard.shortcut('enter', e, () => {
+				e.preventDefault();
 
-			if (onChange) {
-				onChange(this.value, () => { menuStore.close(MENU_ID); });
-			};
-		});
+				if (onChange) {
+					onChange(this.value, () => menuStore.close(MENU_ID));
+				};
+			});
+		};
 	};
 
 	onFocus (e: any) {
@@ -387,8 +391,7 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 	};
 
 	onBlur (e: any) {
-		const { relation, onChange, recordId, getRecord } = this.props;
-		const record = getRecord(recordId);
+		const { relation, record, onChange } = this.props;
 
 		if (!this.ref || keyboard.isBlurDisabled || !record) {
 			return;
@@ -427,22 +430,33 @@ const CellText = observer(class CellText extends React.Component<I.Cell, State> 
 		};
 
 		v = String(v || '').replace(/_/g, '');
-		return v ? UtilCommon.parseDate(v, viewRelation.dateFormat) : null;
+		return v ? UtilDate.parseDate(v, viewRelation.dateFormat) : null;
 	};
 
 	onIconSelect (icon: string) {
-		UtilObject.setIcon(this.props.recordId, icon, '');
+		UtilObject.setIcon(this.props.record.id, icon, '');
 	};
 
-	onIconUpload (hash: string) {
-		UtilObject.setIcon(this.props.recordId, '', hash);
+	onIconUpload (objectId: string) {
+		UtilObject.setIcon(this.props.record.id, '', objectId);
 	};
 
 	onCheckbox () {
-		const { recordId, getRecord } = this.props;
-		const record = getRecord(recordId);
+		const { record } = this.props;
 
-		UtilObject.setDone(recordId, !record.done, () => this.forceUpdate());
+		UtilObject.setDone(record.id, !record.done, () => {
+			if (this._isMounted) {
+				this.forceUpdate();
+			};
+		});
+	};
+
+	onCompositionStart () {
+		this.isComposition = true;
+	};
+
+	onCompositionEnd () {
+		this.isComposition = false;
 	};
 
 });

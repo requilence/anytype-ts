@@ -6,9 +6,9 @@ import { I, UtilCommon, keyboard, translate, analytics } from 'Lib';
 import Constant from 'json/constant.json';
 
 const SKIP = [ 
-	'span', 'div', 'name', 'mention', 'color', 'bgcolor', 'strike', 'kbd', 'italic', 'bold', 
-	'underline', 'lnk', 'emoji', 'obj',
-];
+	'span', 'div', 'name', 'markupMention', 'markupColor', 'markupBgcolor', 'markupStrike', 'markupCode', 'markupItalic', 'markupBold', 
+	'markupUnderline', 'markupLink', 'markupEmoji', 'markupObject',
+].map(tag => tag.toLowerCase());
 
 class MenuSearchText extends React.Component<I.Menu> {
 	
@@ -16,6 +16,7 @@ class MenuSearchText extends React.Component<I.Menu> {
 	ref = null;
 	last = '';
 	n = 0;
+	toggled = [];
 	
 	constructor (props: I.Menu) {
 		super(props);
@@ -48,9 +49,9 @@ class MenuSearchText extends React.Component<I.Menu> {
 				<div className="buttons">
 
 					<div id="switcher" className="switcher">
-						<Icon className="arrow left" onClick={() => { this.onArrow(-1); }} />
+						<Icon className="arrow left" onClick={() => this.onArrow(-1)} />
 						<div id="cnt" className="cnt" />
-						<Icon className="arrow right" onClick={() => { this.onArrow(1); }} />
+						<Icon className="arrow right" onClick={() => this.onArrow(1)} />
 					</div>
 
 					<div className="line" />
@@ -153,6 +154,15 @@ class MenuSearchText extends React.Component<I.Menu> {
 					return false;
 				};
 
+				const parents = $(el).parents('.block.textToggle:not(.isToggled)');
+				if (parents.length) {
+					const parent = $(parents[0]);
+					const id = parents.attr('data-id');
+
+					this.toggled.push(id);
+					parent.addClass('isToggled');
+				};
+
 				const style = window.getComputedStyle(el);
 				if ((style.display == 'none') || (style.opacity == '0') || (style.visibility == 'hidden')) {
 					return false;
@@ -191,6 +201,11 @@ class MenuSearchText extends React.Component<I.Menu> {
 			item.replaceWith(item.html());
 		});
 
+		for (const id of this.toggled) {
+			$(`#block-${id}`).removeClass('isToggled');
+		};
+
+		this.toggled = [];
 		switcher.removeClass('active');
 	};
 

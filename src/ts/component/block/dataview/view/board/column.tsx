@@ -2,7 +2,7 @@ import * as React from 'react';
 import $ from 'jquery';
 import { observer } from 'mobx-react';
 import { Icon, LoadMore } from 'Component';
-import { I, Relation, UtilData, UtilCommon, translate } from 'Lib';
+import { I, Relation, UtilData, UtilObject, UtilCommon, translate, Dataview } from 'Lib';
 import { dbStore, detailStore, menuStore } from 'Store';
 import Card from './card';
 import Cell from 'Component/block/dataview/cell';
@@ -33,8 +33,9 @@ const Column = observer(class Column extends React.Component<Props> {
 	};
 
 	render () {
-		const { rootId, block, id, getSubId, getView, getLimit, value, onDragStartColumn } = this.props;
+		const { rootId, block, id, getSubId, getView, getLimit, value, onDragStartColumn, getTarget } = this.props;
 		const view = getView();
+		const target = getTarget();
 		const subId = getSubId();
 		const items = this.getItems();
 		const { total } = dbStore.getMeta(subId, '');
@@ -46,6 +47,7 @@ const Column = observer(class Column extends React.Component<Props> {
 		const order = (block.content.groupOrder || []).find(it => it.viewId == view.id);
 		const orderGroup = (order?.groups || []).find(it => it.groupId == id) || {};
 		const isAllowedObject = this.props.isAllowedObject();
+		const tooltip = Dataview.getCreateTooltip(rootId, block.id, target.id, view.id);
 
 		if (view.groupBackgroundColors) {
 			cn.push('withColor');
@@ -81,18 +83,17 @@ const Column = observer(class Column extends React.Component<Props> {
 								block={block}
 								relationKey={view.groupRelationKey} 
 								viewType={I.ViewType.Board}
-								getRecord={() => head}
-								recordId=""
+								record={head}
 								readonly={true} 
 								arrayLimit={4}
-								withLabel={true}
+								withName={true}
 								placeholder={translate('commonUncategorized')}
 							/>
 						</div>
 
 						<div className="side right">
 							<Icon id={`button-${id}-more`} className="more" tooltip={translate('blockDataviewBoardColumnSettings')} onClick={this.onMore} />
-							{isAllowedObject ? <Icon className="add" tooltip={translate('blockDataviewCreateNew')} onClick={e => this.onAdd(e, -1)} /> : ''}
+							{isAllowedObject ? <Icon className="add" tooltip={tooltip} onClick={e => this.onAdd(e, -1)} /> : ''}
 						</div>
 					</div>
 
@@ -107,7 +108,7 @@ const Column = observer(class Column extends React.Component<Props> {
 								{...this.props}
 								id={item.id}
 								groupId={id}
-								recordId={item.id}
+								record={item}
 							/>
 						))}
 
@@ -148,7 +149,9 @@ const Column = observer(class Column extends React.Component<Props> {
 		const objectIds = el ? el.objectIds || [] : [];
 		const subId = getSubId();
 		const limit = getLimit() + this.offset;
-		const filters: I.Filter[] = [].concat(view.filters);
+		const filters: I.Filter[] = [
+			{ operator: I.FilterOperator.And, relationKey: 'layout', condition: I.FilterCondition.NotIn, value: UtilObject.excludeFromSet() },
+		].concat(view.filters);
 		const sorts: I.Sort[] = [].concat(view.sorts);
 		const searchIds = getSearchIds();
 
@@ -165,12 +168,12 @@ const Column = observer(class Column extends React.Component<Props> {
 				filter.value = value;
 				break;
 
-			case I.RelationType.Status:
+			case I.RelationType.Select:
 				filter.condition = value ? I.FilterCondition.Equal : I.FilterCondition.Empty;
 				filter.value = value ? value : null;
 				break;
 
-			case I.RelationType.Tag:
+			case I.RelationType.MultiSelect:
 				value = Relation.getArrayValue(value);
 				filter.condition = value.length ? I.FilterCondition.ExactIn : I.FilterCondition.Empty;
 				filter.value = value.length ? value : null;
@@ -189,8 +192,8 @@ const Column = observer(class Column extends React.Component<Props> {
 
 		UtilData.searchSubscribe({
 			subId,
-			filters,
-			sorts,
+			filters: filters.map(it => Dataview.filterMapper(view, it)),
+			sorts: sorts.map(it => Dataview.filterMapper(view, it)),
 			keys: getKeys(view.id),
 			sources: object.setOf || [],
 			limit,
@@ -243,7 +246,7 @@ const Column = observer(class Column extends React.Component<Props> {
 		menuStore.open('dataviewGroupEdit', {
 			element: `#column-${id}-head`,
 			horizontal: I.MenuDirection.Center,
-			onClose: () => { node.removeClass('active'); },
+			onClose: () => node.removeClass('active'),
 			data: {
 				rootId,
 				blockId: block.id,

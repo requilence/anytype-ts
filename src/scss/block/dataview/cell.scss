@@ -10,7 +10,7 @@
 	.icon.edit { display: none !important; }
 	.cellContent { 
 		position: absolute; left: 0px; top: 0px; overflow: visible !important; height: auto !important; white-space: normal !important; 
-		background: $colorBgPrimary; z-index: 10; min-height: 100%; box-shadow: 0px 0px 0px 2px #ffcf6f;
+		background: var(--color-bg-primary); z-index: 10; min-height: 100%; box-shadow: 0px 0px 0px 2px var(--color-system-accent-50);
 	}
 	.cellContent {
 		.name { display: inline-block; }
@@ -24,7 +24,7 @@
 	.icon.clear:hover { background-image: url('~img/icon/clear1.svg'); }
 }
 
-.cell.isEditing.c-select.isStatus {
+.cell.isEditing.c-select.isSelect {
 	.icon.clear { display: block; }
 	.over { display: inline-block; vertical-align: top; font-size: 0px; width: calc(100% - 30px); }
 }
@@ -45,20 +45,23 @@
 	.name { display: inline-block; vertical-align: top; }
 	.empty { vertical-align: top; display: none; }
 
-	.more { 
-		background: $colorVeryLightGrey; border-radius: 3px; display: inline-block; vertical-align: middle; padding: 0px 4px; 
-		@include text-small; color: $colorDarkGrey;
-	}
+	.more { display: inline-block; vertical-align: middle; @include text-small; color: var(--color-text-secondary); }
 }
 
+.cellContent.c-checkbox { display: flex; flex-direction: row; align-items: center; gap: 0px 2px; }
 .cellContent.c-checkbox {
 	.icon { width: 20px; height: 20px; background-image: url('~img/icon/dataview/checkbox0.svg'); }
-	.icon.active { background-image: url('~img/icon/dataview/checkbox1.svg'); }
+	.icon.active { background-image: url('~img/icon/dataview/checkbox2.svg'); }
+
+	.label { line-height: 20px; }
+}
+.cellContent.c-checkbox.canEdit {
+	.icon:not(.active):hover { background-image: url('~img/icon/dataview/checkbox1.svg'); }
 }
 
 .cellContent.c-file {
 	.inputWithFile { border: 0px; padding: 0px; display: none; }
-	.element { display: inline-block; vertical-align: top; white-space: nowrap; max-width: 100%; margin-right: 8px; }
+	.element { display: inline-block; vertical-align: top; white-space: nowrap; max-width: 100%; }
 	.element {
 		.iconObject { flex-shrink: 0; }
 		.name { line-height: 20px; width: 100%; @include text-overflow-nw; }
@@ -67,18 +70,22 @@
 }
 
 .cellContent.c-select {
-	.over { display: inline-block; vertical-align: top; width: 100%; }
-	.tagItem { margin: 0px 8px 8px 0px; vertical-align: top; }
-	.tagItem:last-child { margin-right: 0px; }
 	.more { height: 18px; }
 }
 
 .cellContent.c-object {
-	.element { display: inline-block; margin: 0px 8px 2px 0px; vertical-align: top; max-width: 100%; line-height: 20px; white-space: nowrap; }
+	.element { display: inline-block; vertical-align: top; max-width: 100%; line-height: 20px; white-space: nowrap; }
 	.element:last-child { margin-right: 0px; }
 	.element {
-		.flex { align-items: center; }
+		.iconObject { margin: 0px !important; }
+		.flex { align-items: center; gap: 0px 4px; }
 		.name { line-height: 20px; width: 100%; @include text-overflow-nw; }
+	}
+}
+.cellContent.c-object.canEdit {
+	.element { cursor: grab; }
+	.element {
+		.icon.objectRemove { cursor: default; display: none; }
 	}
 }
 
@@ -89,6 +96,12 @@
 
 .cellContent.c-link {
 	.icon.user { margin-right: 5px; }
+}
+
+.cellContent.c-select,
+.cellContent.c-object,
+.cellContent.c-file {
+	.over { display: inline-flex; vertical-align: top; width: 100%; gap: 4px 8px; align-items: flex-start; }
 }
 
 .cell.isEditing.c-shortText, 
@@ -106,29 +119,32 @@
 	.itemWrap { display: inline-block; }
 
 	.placeholder { position: absolute; left: 0px; top: 0px; height: 100%; }
-	#entry { -webkit-user-modify: read-write-plaintext-only; color: $colorTextPrimary; }
+	#entry { -webkit-user-modify: read-write-plaintext-only; color: var(--color-text-primary); }
 	#list { margin-right: 6px; position: relative; word-wrap: break-word; }
 }
 
 .cell.isEditing.c-select {
-	.itemWrap { height: 18px; line-height: 18px; margin: 0px 8px 8px 0px; position: relative; vertical-align: top; max-width: 100%; }
+	.itemWrap { height: 18px; line-height: 18px; margin: 0px 8px 4px 0px; position: relative; vertical-align: top; max-width: 100%; }
 	.itemWrap:last-child { margin-right: 0px !important; }
-	.itemWrap.isDraggable { cursor: grab; }
-
 	.itemWrap {
 		.tagItem { margin: 0px !important; }
+	}
+
+	.itemWrap.isDraggable { cursor: grab; }
+	.itemWrap.isDraggable {
+		#remove { cursor: default; }
 	}
 }
 
 .cell.isEditing.c-object {
-	.itemWrap { margin: 0px 8px 2px 0px; max-width: 100%; }
+	.itemWrap { margin: 0px 8px 4px 0px; max-width: 100%; }
 	.itemWrap:empty { margin: 0px; }
 	.itemWrap:last-child { margin-right: 0px !important; }
 	.itemWrap {
 		.element { margin: 0px !important; }
 		.element {
 			.icon.objectRemove { 
-				width: 12px; height: 20px; margin: 0px 0px 0px 2px; flex-shrink: 0;
+				width: 12px; height: 20px; margin: 0px 0px 0px 2px; flex-shrink: 0; display: block;
 				background-image: url('~img/icon/object/remove.svg'); background-size: 8px;
 			}
 			.icon.objectRemove:hover { opacity: 0.8; }
@@ -136,9 +152,9 @@
 	}
 }
 
-.cellContent.c-longText { white-space: pre; }
+.cellContent.c-longText { white-space: pre-wrap; }
 .cell.isEditing.c-longText {
-	.cellContent { white-space: pre !important; }
+	.cellContent { white-space: pre-wrap !important; }
 }
 
 .cellContent.canEdit.c-shortText, 
